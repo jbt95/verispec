@@ -1,0 +1,27 @@
+name: LinkQueue
+description: Link-Vault inspired queue - links are saved, then summarized; summarized never exceeds saved.
+vars:
+  saved: {type: int, min: 0, max: 20}
+  summarized: {type: int, min: 0, max: 20}
+  pending: {type: int, min: 0, max: 20}
+init:
+  saved: "0"
+  summarized: "0"
+  pending: "0"
+actions:
+  - name: save_link
+    params: {}
+    requires: ["saved < 20"]
+    effects:
+      saved: "saved + 1"
+      pending: "pending + 1"
+  - name: summarize_one
+    params: {}
+    requires: ["pending > 0"]
+    effects:
+      summarized: "summarized + 1"
+      pending: "pending - 1"
+invariants:
+  - {name: summarized_le_saved, expr: "summarized <= saved"}
+  - {name: pending_accounting, expr: "pending == saved - summarized"}
+  - {name: non_negative_pending, expr: "pending >= 0"}

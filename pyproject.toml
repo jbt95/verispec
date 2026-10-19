@@ -1,0 +1,20 @@
+[build-system]
+requires=["hatchling"]
+build-backend="hatchling.build"
+[project]
+name="verispec"
+version="0.1.0"
+description="Spec-driven development with formal teeth: one formal spec -> Z3 BMC, TLA+ export, generated property tests and trace conformance for any language."
+readme="README.md"
+requires-python=">=3.11"
+license={text="MIT"}
+dependencies=["z3-solver>=4.12","PyYAML>=6.0"]
+[project.optional-dependencies]
+dev=["pytest>=8","hypothesis>=6"]
+test=["pytest>=8","hypothesis>=6"]
+[project.scripts]
+verispec="verispec.cli:main"
+[tool.hatch.build.targets.wheel]
+packages=["src/verispec"]
+[tool.pytest.ini_options]
+testpaths=["tests"]
