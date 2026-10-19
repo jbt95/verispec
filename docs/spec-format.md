@@ -482,7 +482,7 @@ evaluation time.
 
 `c[k]` reads a map (by key), a sequence (by index) or a record (by field name).
 
-```yaml
+```text
 balances[0]          # map read
 history[0]           # sequence read
 customer["active"]   # record read
@@ -494,7 +494,7 @@ forbidden everywhere.
 
 ### Membership
 
-```yaml
+```text
 "reference not in seen"    # set membership
 "0 in balances"            # map key membership
 "3 in history"             # list literal membership

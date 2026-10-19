@@ -90,7 +90,9 @@ Java/Kotlin.
 - **Added** the GitHub Action: bounded model checking, trace checking, SARIF
   for code scanning, the HTML report as an artifact, a pull request comment
   with the counterexample, and the read-only spec policy.
-- **Added** the GitLab CI template and the Docker image.
+- **Added** the GitHub Action, the release workflow (PyPI and npm) and the
+  Docker image. The CI/CD story is GitHub: the action for users, and the
+  release pipeline for the project.
 - **Added** the conformance corpus, which is the source of truth for the
   format.
 

@@ -32,6 +32,6 @@ data anywhere. The rows in this table are added by humans, by hand.
   (`Python`, `TypeScript`, `Go`, `Rust`, `C`, `Java`, ...).
 - **Spec(s)**: the spec files in your repository that follow the VeriSpec
   format, or a count if you prefer not to enumerate them.
-- **CI**: where the checks run (`GitHub Actions`, `GitLab CI`, `internal`, ...).
+- **CI**: where the checks run (`GitHub Actions`, or your own pipeline).
 - **Added by**: your GitHub handle, so a maintainer can reach you if something
   breaks.

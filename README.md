@@ -167,8 +167,9 @@ counterexample:
     bound: 10
 ```
 
-The same job is available for GitLab (`ci/gitlab-ci.yml`) and as a Docker
-image (`docker run --rm -v "$PWD:/work" -w /work verispec check specs/bank.verispec.yaml`).
+The same job is available as a Docker image
+(`docker run --rm -v "$PWD:/work" -w /work verispec check specs/bank.verispec.yaml`),
+and the CLI's exit codes and `--format json` output work in any pipeline.
 
 The spec is human owned: if a pull request changes the spec, the Action
 requires a human approval label before it lets the change through.
@@ -222,7 +223,7 @@ coding agent, with the read-only rule at the top.
 | --- | --- |
 | [`docs/spec-format.md`](docs/spec-format.md) | The v1 format reference |
 | [`docs/tutorial-15min.md`](docs/tutorial-15min.md) | From zero to a counterexample |
-| [`docs/ci.md`](docs/ci.md) | GitHub Actions and GitLab CI |
+| [`docs/ci.md`](docs/ci.md) | GitHub Actions: the action, the recipes, the release |
 | [`docs/language-integrations.md`](docs/language-integrations.md) | Per-language recipes |
 | [`docs/adapter-authoring.md`](docs/adapter-authoring.md) | How to write an adapter |
 | [`docs/guarantees.md`](docs/guarantees.md) | What each guarantee means |

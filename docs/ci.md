@@ -5,10 +5,11 @@ pipeline is what stops a change from quietly breaking it.
 
 - [What to run](#what-to-run)
 - [Exit codes](#exit-codes)
+- [The VeriSpec action](#the-verispec-action)
 - [GitHub Actions](#github-actions)
-- [GitLab CI](#gitlab-ci)
 - [The read-only spec policy](#the-read-only-spec-policy)
-- [What to do when CI fails](#what-to-do-when-ci-fails)
+- [Releasing](#releasing)
+- [What to do when CI fails](#what-to do-when-ci-fails)
 
 ---
 
@@ -32,8 +33,8 @@ $ verispec check specs/bank.yaml --bound 10 --format json > verispec.json
 ```
 
 `--format json` prints a machine-readable result. `--format sarif` prints
-SARIF 2.1.0, which GitHub code scanning, GitLab SAST and Azure DevOps all
-consume.
+SARIF 2.1.0, which GitHub code scanning consumes directly; the JSON output is
+there for any other pipeline that wants to make its own decisions.
 
 ## Exit codes
 
@@ -61,6 +62,53 @@ The first line produces the SARIF file even when a counterexample exists (so
 code scanning gets the result); the second line fails the job with the real
 exit code. Never use `|| true` on the *last* check of a job: that is how a
 broken contract gets merged.
+
+## The VeriSpec action
+
+The shortest way to add VeriSpec to a repository is the published action. It
+does everything: it checks the spec, checks the traces, uploads SARIF for code
+scanning, publishes the HTML report as an artifact, and comments the pull
+request with the counterexample.
+
+```yaml
+name: verispec
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  security-events: write   # upload SARIF to code scanning
+  pull-requests: write     # comment the pull request
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: verispec/verispec@v1
+        with:
+          spec: specs/bank.verispec.yaml
+          traces: traces/bank.json
+          bound: "10"
+```
+
+| Input | What it does |
+| --- | --- |
+| `spec` | The spec to check. Required. |
+| `traces` | Comma separated JSON traces to replay against the spec. |
+| `bound` | The bound for the bounded model checker. Default `10`. |
+| `timeout-ms` | The solver timeout per bound. Default `30000`. |
+| `python-version` | The Python version used to run VeriSpec. Default `3.11`. |
+| `version` | The VeriSpec version to install. Empty installs this repository. |
+| `comment` | Comment the pull request with the counterexample. Default `true`. |
+| `report` | Publish the HTML report as an artifact. Default `true`. |
+| `require-spec-approval` | Fail when the spec changed without a human approval. Default `true`. |
+| `approval-label` | The label that marks an approved spec change. Default `spec-approved`. |
+
+The action fails the job with the real exit code, so a violation is a red
+build.
 
 ## GitHub Actions
 
@@ -307,133 +355,6 @@ jobs:
       - run: verispec check specs/bank.yaml --bound 10
 ```
 
-## GitLab CI
-
-Save this as `.gitlab-ci.yml`:
-
-```yaml
-stages:
-  - verify
-
-variables:
-  SPECS: "specs/bank.yaml specs/ledger.yaml"
-  BOUND: "10"
-  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
-
-default:
-  image: python:3.11-slim
-  before_script:
-    - python -m pip install --upgrade pip
-    - pip install --cache-dir "$PIP_CACHE_DIR" -e ".[test]"
-
-# ---------------------------------------------------------------------
-# The spec is human owned. A merge request that changes it needs a human.
-# ---------------------------------------------------------------------
-spec-approval:
-  stage: verify
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      changes:
-        - "specs/**/*.yaml"
-        - "specs/**/*.yml"
-  allow_failure: false
-  when: manual
-  script:
-    - |
-      echo "This merge request changes a spec."
-      echo "A human must review the diff, confirm that no invariant,"
-      echo "precondition or bound was weakened, and then run this job."
-      git diff "$CI_MERGE_REQUEST_DIFF_BASE_SHA" "$CI_COMMIT_SHA" -- specs/
-
-# ---------------------------------------------------------------------
-# The actual verification.
-# ---------------------------------------------------------------------
-verify:
-  stage: verify
-  needs: []
-  script:
-    - |
-      for spec in $SPECS; do
-        echo "--- $spec"
-        verispec validate "$spec"
-        verispec lint "$spec"
-      done
-    - |
-      status=0
-      for spec in $SPECS; do
-        verispec check "$spec" --bound "$BOUND" --format sarif > "${spec%.yaml}.sarif" || status=$?
-      done
-      cat ./*.sarif > verispec.sarif
-      rm -f ./*.sarif
-      exit "$status"
-    - |
-      status=0
-      for trace in traces/*.json; do
-        [ -e "$trace" ] || continue
-        spec="specs/$(basename "${trace%.json}").yaml"
-        [ -f "$spec" ] || continue
-        verispec check-trace "$spec" "$trace" || status=$?
-      done
-      exit "$status"
-  artifacts:
-    when: always
-    paths:
-      - verispec.sarif
-      - verispec-report.html
-      - verispec-counterexample.html
-    reports:
-      sast: verispec.sarif
-    expire_in: 1 week
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-
-verispec-report:
-  stage: verify
-  needs: []
-  script:
-    - verispec report specs/bank.yaml -o verispec-report.html --bound "$BOUND" || true
-    - verispec view specs/bank.yaml -o verispec-counterexample.html --bound "$BOUND" || true
-  artifacts:
-    when: always
-    paths:
-      - verispec-report.html
-      - verispec-counterexample.html
-    expire_in: 1 week
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-```
-
-### Notes on the GitLab job
-
-- `artifacts:reports:sast` publishes the SARIF file to the merge request
-  widget, so a reviewer sees the violated invariant without opening the
-  pipeline.
-- `when: manual` on `spec-approval` is GitLab's way of requiring a human:
-  the merge request cannot be merged until someone with permission runs the
-  job, and the job prints the spec diff for them to review.
-- The `rules:` on `spec-approval` restrict it to merge requests that actually
-  touch the spec.
-- `artifacts: when: always` keeps the report even when the check fails, which
-  is exactly when you want it.
-
-### A minimal GitLab job
-
-```yaml
-verispec:
-  image: python:3.11-slim
-  before_script:
-    - pip install -e ".[test]"
-  script:
-    - verispec check specs/bank.yaml --bound 10 --format sarif > verispec.sarif || true
-    - verispec check specs/bank.yaml --bound 10
-  artifacts:
-    when: always
-    reports:
-      sast: verispec.sarif
-```
-
 ## The read-only spec policy
 
 **The spec is the contract, and it is owned by humans.** The tooling never
@@ -450,12 +371,11 @@ What counts as weakening a spec:
 
 What the policy looks like in practice:
 
-| Platform | Mechanism |
+| Mechanism | What it does |
 | --- | --- |
-| GitHub Actions | A `spec-approval` job that requires the `spec-approved` label on the pull request when a spec file changed. |
-| GitLab CI | A manual `spec-approval` job, triggered only when a spec file changed. |
-| Both | `CODEOWNERS` lists the spec directory, so a reviewer is requested automatically. |
-| Both | `verispec sign` records the digest a human approved; `verispec verify-signature` fails when the spec changes afterwards. |
+| A `spec-approval` job | Requires the `spec-approved` label on the pull request when a spec file changed. |
+| `CODEOWNERS` | Lists the spec directory, so a reviewer is requested automatically. |
+| `verispec sign` and `verispec verify-signature` | Record the digest a human approved, and fail when the spec changes afterwards. |
 
 The digest is the strongest mechanical guarantee. Sign the spec once a human
 has approved it:
@@ -476,6 +396,27 @@ OK: spec matches its approved digest (approver: alice). No cryptographic signatu
 
 Add `--gpg` to `verispec sign` to attach a detached GPG signature. Then the
 approver is a cryptographic fact, not a claim, and the verifier says so.
+
+## Releasing
+
+VeriSpec releases itself with GitHub Actions. Pushing a tag builds the
+distributions, publishes them, and creates the release:
+
+```console
+$ git tag v1.0.1 && git push origin v1.0.1
+```
+
+The `release` workflow (`.github/workflows/release.yml`) has four jobs:
+
+| Job | What it does |
+| --- | --- |
+| `build` | Builds the Python distribution and the npm package, checks them, and uploads them as artifacts. |
+| `publish-pypi` | Publishes to PyPI with trusted publishing (no token needed, the `id-token: write` permission is enough). |
+| `publish-npm` | Publishes `@verispec/adapter` to npm. Needs an `NPM_TOKEN` secret in the `npm` environment. |
+| `release` | Creates the GitHub release with the generated notes and the artifacts attached. |
+
+The npm package lives in `adapters/typescript/`, so the adapter SDK and the
+Python CLI are released from the same tag.
 
 ## What to do when CI fails
 
