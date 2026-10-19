@@ -2,15 +2,15 @@
 
 ## Supported versions
 
-VeriSpec is pre-1.0. Security fixes are applied to the latest released
-version and to the `main` branch. Older minors are not patched; upgrade to the
-latest release.
+VeriSpec is currently at 1.0.0. Security fixes are applied to the latest
+released version and to the `main` branch. Older releases are not patched;
+upgrade to the latest release.
 
 | Version | Supported |
 | --- | --- |
-| 0.1.x (latest) | yes |
+| 1.x (latest release) | yes |
 | `main` | yes |
-| older minors | no |
+| older releases | no |
 
 ## Reporting a vulnerability
 

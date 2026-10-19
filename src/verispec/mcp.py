@@ -20,7 +20,7 @@ from typing import Any, TextIO
 
 from . import __version__
 from .expr import SpecError
-from .model import load_spec
+from .model import Spec, load_spec
 from .sign import spec_digest
 
 __all__ = ["serve", "handle_request", "TOOLS"]
@@ -78,43 +78,79 @@ TOOLS = [
 ]
 
 
-def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
+def handle_request(request: Any) -> dict[str, Any] | None:
     """Handle one JSON-RPC request; None for notifications."""
-    method = request.get("method")
-    request_id = request.get("id")
-    if method is None:
-        return None
-    if request_id is None and method.startswith("notifications/"):
-        return None
+    parts = _request_parts(request)
+    if parts is None or isinstance(parts, dict):
+        return parts
+    request_id, method, request = parts
     try:
-        if method == "initialize":
-            result: Any = {
-                "protocolVersion": PROTOCOL_VERSION,
-                "capabilities": {"tools": {"listChanged": False}},
-                "serverInfo": {"name": "verispec", "version": __version__},
-            }
-        elif method == "tools/list":
-            result = {"tools": TOOLS}
-        elif method == "tools/call":
-            result = _call_tool(request.get("params") or {})
-        elif method == "ping":
-            result = {}
-        else:
-            return _error(request_id, -32601, f"unknown method {method!r}")
-    except SpecError as e:
-        return _error(request_id, -32602, str(e))
-    except Exception as e:  # pragma: no cover - defensive
-        return _error(request_id, -32603, f"internal error: {e}")
+        found, result = _dispatch(method, request)
+    except SpecError as error:
+        return _error(request_id, -32602, str(error))
+    except Exception:  # pragma: no cover - defensive
+        return _error(request_id, -32603, "internal error")
+    if not found:
+        return _error(request_id, -32601, f"unknown method {method!r}")
     return {"jsonrpc": "2.0", "id": request_id, "result": result}
+
+
+def _request_parts(request: Any) -> tuple[Any, str, dict[str, Any]] | dict[str, Any] | None:
+    if not isinstance(request, dict) or request.get("jsonrpc") != "2.0":
+        return _error(None, -32600, "invalid request")
+    method, request_id = request.get("method"), request.get("id")
+    if not isinstance(method, str) or not method:
+        return _error(request_id, -32600, "invalid request")
+    params = request.get("params")
+    if params is not None and not isinstance(params, (dict, list)):
+        return _error(request_id, -32602, "params must be an object or array")
+    if "id" not in request:
+        return None
+    if isinstance(request_id, bool) or not isinstance(request_id, (str, int, type(None))):
+        return _error(None, -32600, "invalid request id")
+    return request_id, method, request
+
+
+def _dispatch(method: str, request: dict[str, Any]) -> tuple[bool, Any]:
+    if method == "initialize":
+        result = {
+            "protocolVersion": PROTOCOL_VERSION,
+            "capabilities": {"tools": {"listChanged": False}},
+            "serverInfo": {"name": "verispec", "version": __version__},
+        }
+    elif method == "tools/list":
+        result = {"tools": TOOLS}
+    elif method == "tools/call":
+        params = request.get("params", {})
+        if not isinstance(params, dict):
+            raise SpecError("params must be an object")
+        result = _call_tool(params)
+    elif method == "ping":
+        result = {}
+    else:
+        return False, None
+    return True, result
 
 
 def _error(request_id: Any, code: int, message: str) -> dict[str, Any]:
     return {"jsonrpc": "2.0", "id": request_id, "error": {"code": code, "message": message}}
 
 
+def _load_tool_spec(args: dict[str, Any]) -> Spec:
+    spec_path = args.get("spec_path")
+    if not isinstance(spec_path, str) or not spec_path:
+        raise SpecError("spec_path must be a non-empty string")
+    return load_spec(spec_path)
+
+
 def _call_tool(params: dict[str, Any]) -> dict[str, Any]:
     name = params.get("name")
-    args = params.get("arguments") or {}
+    args = params.get("arguments", {})
+    if not isinstance(args, dict):
+        return {
+            "content": [{"type": "text", "text": "arguments must be an object"}],
+            "isError": True,
+        }
     if name == "verify":
         text, is_error = _tool_verify(args)
     elif name == "describe_spec":
@@ -130,14 +166,31 @@ def _call_tool(params: dict[str, Any]) -> dict[str, Any]:
 
 
 def _tool_verify(args: dict[str, Any]) -> tuple[str, bool]:
-    spec_path = args.get("spec_path")
-    if not spec_path:
-        return "spec_path is required", True
-    spec = load_spec(spec_path)
-    bound = int(args.get("bound", 10))
+    spec, bound, invariant, trace_path = _verify_arguments(args)
     from .bmc import check
 
-    result = check(spec, bound=bound, invariant_filter=args.get("invariant"))
+    result = check(spec, bound=bound, invariant_filter=invariant)
+    payload = _verification_payload(spec, result)
+    if trace_path is not None:
+        _attach_trace_check(spec, trace_path, payload)
+    return json.dumps(payload, indent=2), payload["status"] != "ok"
+
+
+def _verify_arguments(args: dict[str, Any]) -> tuple[Spec, int, str | None, str | None]:
+    spec = _load_tool_spec(args)
+    bound = args.get("bound", 10)
+    if isinstance(bound, bool) or not isinstance(bound, int) or bound < 0:
+        raise SpecError("bound must be a non-negative integer")
+    invariant = args.get("invariant")
+    if invariant is not None and not isinstance(invariant, str):
+        raise SpecError("invariant must be a string")
+    trace_path = args.get("trace_path")
+    if trace_path is not None and (not isinstance(trace_path, str) or not trace_path):
+        raise SpecError("trace_path must be a non-empty string")
+    return spec, bound, invariant, trace_path
+
+
+def _verification_payload(spec: Spec, result: dict[str, Any]) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "spec": spec.name,
         "spec_digest": spec_digest(spec),
@@ -147,35 +200,37 @@ def _tool_verify(args: dict[str, Any]) -> tuple[str, bool]:
         "message": result.get("message"),
     }
     if result["status"] == "violation":
-        payload["violations"] = result.get("violations", [])
-        payload["trace"] = result.get("trace", [])
-        payload["guidance"] = (
-            "This is a ground truth counterexample: reproduce it, fix the implementation "
-            "and re-run. Never weaken the spec or the invariant to make it pass."
+        payload.update(
+            violations=result.get("violations", []),
+            trace=result.get("trace", []),
+            guidance=(
+                "This is a ground truth counterexample: reproduce it, fix the implementation "
+                "and re-run. Never weaken the spec or the invariant to make it pass."
+            ),
         )
-    trace_path = args.get("trace_path")
-    if trace_path:
-        from .trace import check_trace
+    return payload
 
-        trace_result = check_trace(spec, trace_path)
-        payload["trace_check"] = {
-            "ok": trace_result["ok"],
-            "reason": trace_result.get("reason"),
-            "detail": trace_result.get("detail"),
-            "failed_step": trace_result.get("failed_step"),
-            "expected": trace_result.get("expected"),
-            "got": trace_result.get("got"),
-        }
-        if not trace_result["ok"]:
-            result = {**result, "status": "violation"}
-    return json.dumps(payload, indent=2), result["status"] == "violation"
+
+def _attach_trace_check(spec: Spec, trace_path: str, payload: dict[str, Any]) -> None:
+    from .trace import check_trace
+
+    trace_result = check_trace(spec, trace_path)
+    payload["trace_check"] = {
+        "ok": trace_result["ok"],
+        "reason": trace_result.get("reason"),
+        "detail": trace_result.get("detail"),
+        "failed_step": trace_result.get("failed_step"),
+        "expected": trace_result.get("expected"),
+        "got": trace_result.get("got"),
+    }
+    if not trace_result["ok"]:
+        payload["status"] = "violation"
+        payload["guarantee"] = "violation-found"
+        payload["message"] = trace_result.get("message") or "trace does not conform"
 
 
 def _tool_describe(args: dict[str, Any]) -> tuple[str, bool]:
-    spec_path = args.get("spec_path")
-    if not spec_path:
-        return "spec_path is required", True
-    spec = load_spec(spec_path)
+    spec = _load_tool_spec(args)
     payload = {
         "name": spec.name,
         "description": spec.description,
@@ -207,18 +262,29 @@ def _tool_describe(args: dict[str, Any]) -> tuple[str, bool]:
 
 
 def _tool_invariants(args: dict[str, Any]) -> tuple[str, bool]:
-    spec_path = args.get("spec_path")
-    if not spec_path:
-        return "spec_path is required", True
-    spec = load_spec(spec_path)
+    spec = _load_tool_spec(args)
     payload = {
         "spec": spec.name,
         "invariants": [
-            {"name": i["name"], "expr": i["expr"], "guarantee": "bounded-proved(k)"}
+            {"name": i["name"], "expr": i["expr"], "guarantee": "not-checked"}
             for i in spec.invariants
         ],
+        "note": "Listing invariants does not run the model checker or establish a guarantee.",
     }
     return json.dumps(payload, indent=2), False
+
+
+def _handle_json_line(line: str) -> dict[str, Any] | list[dict[str, Any]] | None:
+    try:
+        request = json.loads(line)
+    except json.JSONDecodeError:
+        return _error(None, -32700, "parse error")
+    if not isinstance(request, list):
+        return handle_request(request)
+    if not request:
+        return _error(None, -32600, "invalid request")
+    responses = [response for item in request if (response := handle_request(item))]
+    return responses or None
 
 
 def serve(stdin: TextIO | None = None, stdout: TextIO | None = None) -> int:
@@ -227,19 +293,9 @@ def serve(stdin: TextIO | None = None, stdout: TextIO | None = None) -> int:
     stdout = stdout or sys.stdout
     for line in stdin:
         line = line.strip()
-        if not line:
-            continue
-        try:
-            request = json.loads(line)
-        except json.JSONDecodeError:
-            response: dict[str, Any] | None = _error(None, -32700, "parse error")
-        else:
-            if isinstance(request, list):
-                responses = [r for r in (handle_request(r) for r in request) if r]
-                response = responses or None
-            else:
-                response = handle_request(request)
-        if response is not None:
-            stdout.write(json.dumps(response) + "\n")
-            stdout.flush()
+        if line:
+            response = _handle_json_line(line)
+            if response is not None:
+                stdout.write(json.dumps(response) + "\n")
+                stdout.flush()
     return 0

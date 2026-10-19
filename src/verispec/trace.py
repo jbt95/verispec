@@ -31,11 +31,14 @@ GUARANTEE_CONFORMANCE = "conformance-tested"
 
 def load_trace(trace_path: str | Path) -> list[dict[str, Any]]:
     """Read a trace file and validate its shape."""
-    with open(trace_path) as f:
-        try:
-            trace = json.load(f)
-        except json.JSONDecodeError as e:
-            raise SpecError(f"{trace_path}: invalid JSON: {e}") from e
+    try:
+        raw = Path(trace_path).read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as error:
+        raise SpecError(f"{trace_path}: cannot read trace: {error}") from error
+    try:
+        trace = json.loads(raw)
+    except json.JSONDecodeError as error:
+        raise SpecError(f"{trace_path}: invalid JSON: {error}") from error
     if not isinstance(trace, list) or not trace:
         raise SpecError("trace must be a non-empty JSON list")
     for i, step in enumerate(trace):
@@ -57,8 +60,12 @@ def check_trace_data(spec: Spec, trace: list[dict[str, Any]]) -> dict[str, Any]:
     """Check an in-memory trace against a spec."""
     if not isinstance(trace, list) or not trace:
         return _fail(None, "invalid-trace", "trace must be a non-empty JSON list")
+    if any(not isinstance(step, dict) for step in trace):
+        return _fail(None, "invalid-trace", "trace steps must be JSON objects")
     types = spec.types
-    init = initial_state(spec)
+    init, error = _evaluate_initial_state(spec)
+    if error:
+        return _fail(None, "evaluation-error", f"cannot evaluate initial state: {error}")
     for i, step in enumerate(trace):
         raw_state = step.get("state")
         try:
@@ -76,7 +83,9 @@ def check_trace_data(spec: Spec, trace: list[dict[str, Any]]) -> dict[str, Any]:
                 got=value_to_json(types, state),
                 violated=[over[0]],
             )
-        bad = check_invariants(spec, state)
+        bad, error = _evaluate_invariants(spec, state)
+        if error:
+            return _fail(i, "evaluation-error", f"cannot evaluate invariants at step {i}: {error}")
         if bad:
             return _fail(
                 i,
@@ -102,14 +111,14 @@ def check_trace_data(spec: Spec, trace: list[dict[str, Any]]) -> dict[str, Any]:
         except SpecError as e:
             return _fail(i - 1, "invalid-state", str(e))
         action = step.get("action")
-        params = step.get("params") or {}
-        if action in (None, "init"):
-            return _fail(i, "missing-action", f"step {i}: missing action")
+        params = step.get("params", {})
+        if not isinstance(action, str) or not action:
+            return _fail(i, "missing-action", f"step {i}: missing or invalid action")
+        if not isinstance(params, dict):
+            return _fail(i, "invalid-params", f"step {i}: params must be an object")
         if not spec.has_action(action):
             return _fail(i, "unknown-action", f"step {i}: unknown action {action!r}")
         a = spec.action(action)
-        if not isinstance(params, dict):
-            return _fail(i, "invalid-params", f"step {i}: params must be an object")
         for pn, pv in a.params.items():
             if pn not in params:
                 return _fail(i, "missing-param", f"step {i}: action {action} misses param {pn!r}")
@@ -122,25 +131,16 @@ def check_trace_data(spec: Spec, trace: list[dict[str, Any]]) -> dict[str, Any]:
                 return _fail(
                     i, "unknown-param", f"step {i}: action {action} has no param {extra!r}"
                 )
-        env = {**prev_state, **params}
-        for r in a.requires:
-            if not eval_python(r, env, spec.tenv(a)):
-                return _fail(
-                    i,
-                    "precondition",
-                    f"step {i}: precondition violated for action {action}: {r} "
-                    f"(prev={prev_state}, params={params})",
-                )
-        expected = dict(prev_state)
-        for k, e in a.effects.items():
-            var = spec.vars[k]
-            if var.kind == "record":
-                rec = dict(prev_state[k])
-                for fname, fexpr in e.items():
-                    rec[fname] = eval_python(fexpr, env, spec.tenv(a))
-                expected[k] = rec
-            else:
-                expected[k] = eval_python(e, env, spec.tenv(a))
+        expected, failed_requirement, error = _evaluate_transition(spec, a, prev_state, params)
+        if failed_requirement is not None:
+            return _fail(
+                i,
+                "precondition",
+                f"step {i}: precondition violated for action {action}: {failed_requirement} "
+                f"(prev={prev_state}, params={params})",
+            )
+        if error:
+            return _fail(i, "evaluation-error", f"cannot evaluate action {action} at step {i}: {error}")
         if expected != state:
             return _fail(
                 i,
@@ -163,6 +163,45 @@ def check_trace_data(spec: Spec, trace: list[dict[str, Any]]) -> dict[str, Any]:
         "violated": [],
         "guarantee": GUARANTEE_CONFORMANCE,
     }
+
+
+def _evaluate_initial_state(spec: Spec) -> tuple[dict[str, Any] | None, str | None]:
+    try:
+        return initial_state(spec), None
+    except (SpecError, ArithmeticError, KeyError, TypeError, ValueError) as error:
+        return None, str(error)
+
+
+def _evaluate_invariants(
+    spec: Spec, state: dict[str, Any]
+) -> tuple[list[dict[str, str]] | None, str | None]:
+    try:
+        return check_invariants(spec, state), None
+    except (SpecError, ArithmeticError, KeyError, TypeError, ValueError) as error:
+        return None, str(error)
+
+
+def _evaluate_transition(
+    spec: Spec, action, previous: dict[str, Any], params: dict[str, Any]
+) -> tuple[dict[str, Any] | None, str | None, str | None]:
+    env = {**previous, **params}
+    try:
+        for requirement in action.requires:
+            if not eval_python(requirement, env, spec.tenv(action)):
+                return None, requirement, None
+        expected = dict(previous)
+        for key, effect in action.effects.items():
+            variable = spec.vars[key]
+            if variable.kind == "record":
+                record = dict(previous[key])
+                for field, expression in effect.items():
+                    record[field] = eval_python(expression, env, spec.tenv(action))
+                expected[key] = record
+            else:
+                expected[key] = eval_python(effect, env, spec.tenv(action))
+    except (SpecError, ArithmeticError, KeyError, TypeError, ValueError) as error:
+        return None, None, str(error)
+    return expected, None, None
 
 
 def _capacity_violations(spec: Spec, state: dict[str, Any]) -> list[str]:

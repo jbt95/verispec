@@ -308,6 +308,17 @@ export function veriContains(l: any[], v: any): boolean {
   return l.includes(v);
 }
 
+export function veriFloorDiv(a: number, b: number): number {
+  if (b === 0) throw new Error("division by zero");
+  return Math.floor(a / b);
+}
+
+export function veriMod(a: number, b: number): number {
+  if (b === 0) throw new Error("modulo by zero");
+  const r = a % b;
+  return r !== 0 && Math.sign(r) !== Math.sign(b) ? r + b : r;
+}
+
 export function veriEqual(a: any, b: any): boolean {
   if (a === b) return true;
   if (Array.isArray(a) && Array.isArray(b)) {
@@ -378,6 +389,17 @@ export function veriContainsKey(m, k) {
 
 export function veriContains(l, v) {
   return l.includes(v);
+}
+
+export function veriFloorDiv(a, b) {
+  if (b === 0) throw new Error("division by zero");
+  return Math.floor(a / b);
+}
+
+export function veriMod(a, b) {
+  if (b === 0) throw new Error("modulo by zero");
+  const r = a % b;
+  return r !== 0 && Math.sign(r) !== Math.sign(b) ? r + b : r;
 }
 
 export function veriEqual(a, b) {
@@ -728,7 +750,27 @@ func veriContains(l any, v any) bool {
 }
 
 func veriFloorDiv(a, b any) int {
-	return veriToInt(a) / veriToInt(b)
+	x, y := veriToInt(a), veriToInt(b)
+	if y == 0 {
+		panic("division by zero")
+	}
+	q, r := x/y, x%y
+	if r != 0 && ((r < 0) != (y < 0)) {
+		q--
+	}
+	return q
+}
+
+func veriMod(a, b any) int {
+	x, y := veriToInt(a), veriToInt(b)
+	if y == 0 {
+		panic("modulo by zero")
+	}
+	r := x % y
+	if r != 0 && ((r < 0) != (y < 0)) {
+		r += y
+	}
+	return r
 }
 
 func veriAbs(a any) int {

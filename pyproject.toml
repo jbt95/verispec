@@ -51,8 +51,11 @@ verispec = "verispec.cli:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/verispec"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"registry" = "src/verispec/registry_data"
+
 [tool.hatch.build.targets.sdist]
-include = ["src/verispec", "docs", "examples", "corpus", "README.md", "LICENSE"]
+include = ["src/verispec", "registry", "docs", "examples", "corpus", "README.md", "LICENSE"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

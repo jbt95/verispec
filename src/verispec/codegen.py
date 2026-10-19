@@ -133,6 +133,16 @@ def to_ts(src: Any, tenv: dict[str, TypeSpec], var_names: set[str]) -> str:
     return _ts(tree.body, tenv, var_names)
 
 
+def _render_binary(node: ast.BinOp, render, floor_div: str, modulo: str) -> str:
+    left, right = render(node.left), render(node.right)
+    if isinstance(node.op, ast.FloorDiv):
+        return f"{floor_div}({left}, {right})"
+    if isinstance(node.op, ast.Mod):
+        return f"{modulo}({left}, {right})"
+    op = {ast.Add: "+", ast.Sub: "-", ast.Mult: "*"}[type(node.op)]
+    return f"({left} {op} {right})"
+
+
 def _ts(node: ast.AST, tenv: dict[str, TypeSpec], var_names: set[str]) -> str:
     if isinstance(node, ast.Constant):
         v = node.value
@@ -158,12 +168,9 @@ def _ts(node: ast.AST, tenv: dict[str, TypeSpec], var_names: set[str]) -> str:
             return f"(-{_ts(node.operand, tenv, var_names)})"
         return _ts(node.operand, tenv, var_names)
     if isinstance(node, ast.BinOp):
-        op = {ast.Add: "+", ast.Sub: "-", ast.Mult: "*", ast.Mod: "%"}[type(node.op)]
-        a = _ts(node.left, tenv, var_names)
-        b = _ts(node.right, tenv, var_names)
-        if isinstance(node.op, ast.FloorDiv):
-            return f"Math.floor({a} / {b})"
-        return f"({a} {op} {b})"
+        return _render_binary(
+            node, lambda child: _ts(child, tenv, var_names), "veriFloorDiv", "veriMod"
+        )
     if isinstance(node, ast.Compare):
         out = []
         left = _ts(node.left, tenv, var_names)
@@ -338,12 +345,9 @@ def _go(node: ast.AST, tenv: dict[str, TypeSpec], var_names: set[str]) -> str:
             return f"(-{_go(node.operand, tenv, var_names)})"
         return _go(node.operand, tenv, var_names)
     if isinstance(node, ast.BinOp):
-        op = {ast.Add: "+", ast.Sub: "-", ast.Mult: "*", ast.Mod: "%"}[type(node.op)]
-        a = _go(node.left, tenv, var_names)
-        b = _go(node.right, tenv, var_names)
-        if isinstance(node.op, ast.FloorDiv):
-            return f"veriFloorDiv({a}, {b})"
-        return f"({a} {op} {b})"
+        return _render_binary(
+            node, lambda child: _go(child, tenv, var_names), "veriFloorDiv", "veriMod"
+        )
     if isinstance(node, ast.Compare):
         out = []
         left = _go(node.left, tenv, var_names)

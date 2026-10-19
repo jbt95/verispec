@@ -24,6 +24,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from .errors import SpecError
 from .model import Spec
 
 __all__ = [
@@ -77,12 +78,15 @@ def sign_spec(
         ),
     }
     if use_gpg:
-        armored, error = _gpg_detach_sign(digest, gpg_key)
-        if armored is None:
-            doc["gpg"] = {"signed": False, "error": error}
-        else:
-            doc["gpg"] = {"signed": True, "key": gpg_key or "(default key)", "signature": armored}
+        doc["gpg"] = _gpg_metadata(digest, gpg_key)
     return doc
+
+
+def _gpg_metadata(digest: str, gpg_key: str | None) -> dict[str, Any]:
+    armored, error = _gpg_detach_sign(digest, gpg_key)
+    if armored is None:
+        raise SpecError(f"GPG signing was requested but failed: {error}")
+    return {"signed": True, "key": gpg_key or "(default key)", "signature": armored}
 
 
 def write_signature(spec: Spec, path: str | Path, approver: str, **kwargs: Any) -> Path:
@@ -93,15 +97,16 @@ def write_signature(spec: Spec, path: str | Path, approver: str, **kwargs: Any) 
     return out
 
 
-def verify_signature(spec: Spec, signature_path: str | Path) -> dict[str, Any]:
-    """Verify that a spec still matches its signature."""
-    p = Path(signature_path)
-    if not p.exists():
-        return {"ok": False, "reason": "missing-signature", "message": f"no signature file at {p}"}
-    try:
-        doc = json.loads(p.read_text())
-    except json.JSONDecodeError as e:
-        return {"ok": False, "reason": "invalid-signature", "message": f"invalid signature file: {e}"}
+def verify_signature(
+    spec: Spec, signature_path: str | Path, require_cryptographic: bool = False
+) -> dict[str, Any]:
+    """Verify the spec digest, optionally requiring a valid cryptographic signature."""
+    path = Path(signature_path)
+    doc, error = _read_signature_document(path)
+    if error:
+        return error
+    assert doc is not None
+
     expected = spec_digest(spec)
     actual = doc.get("digest")
     if actual != expected:
@@ -115,27 +120,9 @@ def verify_signature(spec: Spec, signature_path: str | Path) -> dict[str, Any]:
             "expected": actual,
             "actual": expected,
         }
-    gpg = doc.get("gpg") or {}
-    if gpg.get("signed"):
-        ok, message = _gpg_verify(expected, gpg.get("signature", ""))
-        if not ok:
-            return {
-                "ok": False,
-                "reason": "gpg-invalid",
-                "message": f"GPG signature is not valid: {message}",
-            }
-        return {
-            "ok": True,
-            "reason": "verified",
-            "message": (
-                f"spec matches its approved digest and the GPG signature verifies "
-                f"(approver: {doc.get('approver')})"
-            ),
-            "approver": doc.get("approver"),
-            "approved_at": doc.get("approved_at"),
-            "digest": expected,
-            "cryptographic": True,
-        }
+    crypto_result = _verify_gpg_document(doc, expected, require_cryptographic)
+    if crypto_result is not None:
+        return crypto_result
     return {
         "ok": True,
         "reason": "digest-match",
@@ -147,6 +134,61 @@ def verify_signature(spec: Spec, signature_path: str | Path) -> dict[str, Any]:
         "approved_at": doc.get("approved_at"),
         "digest": expected,
         "cryptographic": False,
+    }
+
+
+def _read_signature_document(path: Path) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    try:
+        raw = path.read_text()
+    except FileNotFoundError:
+        return None, {"ok": False, "reason": "missing-signature", "message": f"no signature file at {path}"}
+    except OSError as error:
+        return None, {"ok": False, "reason": "invalid-signature", "message": f"cannot read signature file: {error}"}
+    try:
+        doc = json.loads(raw)
+    except json.JSONDecodeError as error:
+        return None, {"ok": False, "reason": "invalid-signature", "message": f"invalid signature file: {error}"}
+    if not isinstance(doc, dict) or doc.get("signature_version") != SIGNATURE_VERSION:
+        return None, {
+            "ok": False,
+            "reason": "invalid-signature",
+            "message": f"unsupported or malformed signature document at {path}",
+        }
+    return doc, None
+
+
+def _verify_gpg_document(
+    doc: dict[str, Any], digest: str, required: bool
+) -> dict[str, Any] | None:
+    gpg = doc.get("gpg", {})
+    if not isinstance(gpg, dict) or not isinstance(gpg.get("signed", False), bool):
+        return {"ok": False, "reason": "invalid-signature", "message": "malformed GPG metadata"}
+    if not gpg.get("signed"):
+        if required:
+            return {
+                "ok": False,
+                "reason": "cryptographic-signature-required",
+                "message": "a cryptographic signature is required, but this document only records a digest",
+                "approver": doc.get("approver"),
+                "digest": digest,
+                "cryptographic": False,
+            }
+        return None
+
+    signature = gpg.get("signature")
+    if not isinstance(signature, str) or not signature:
+        return {"ok": False, "reason": "invalid-signature", "message": "missing armored GPG signature"}
+    ok, message = _gpg_verify(digest, signature)
+    if not ok:
+        return {"ok": False, "reason": "gpg-invalid", "message": f"GPG signature is not valid: {message}"}
+    return {
+        "ok": True,
+        "reason": "verified",
+        "message": f"spec matches its approved digest and the GPG signature verifies (approver: {doc.get('approver')})",
+        "approver": doc.get("approver"),
+        "approved_at": doc.get("approved_at"),
+        "digest": digest,
+        "cryptographic": True,
     }
 
 

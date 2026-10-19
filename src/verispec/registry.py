@@ -33,10 +33,15 @@ def registry_root(explicit: str | Path | None = None) -> Path:
     local = Path.cwd() / "registry"
     if local.is_dir():
         return local
-    packaged = Path(__file__).resolve().parents[2] / "registry"
-    if packaged.is_dir():
-        return packaged
-    return local
+    return _packaged_registry_root() or local
+
+
+def _packaged_registry_root() -> Path | None:
+    package = Path(__file__).resolve().parent / "registry_data"
+    if package.is_dir():
+        return package
+    source = Path(__file__).resolve().parents[2] / "registry"
+    return source if source.is_dir() else None
 
 
 def load_registry(root: str | Path | None = None) -> dict[str, Any]:

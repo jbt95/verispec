@@ -397,7 +397,7 @@ def cmd_verify_signature(args) -> int:
 
     spec = _load_spec_or_die(args.spec)
     path = Path(args.signature) if args.signature else default_signature_path(args.spec)
-    result = verify_signature(spec, path)
+    result = verify_signature(spec, path, require_cryptographic=args.require_cryptographic)
     if args.format == "json":
         _print_json(
             {
@@ -676,6 +676,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("verify-signature", help="verify that a spec still matches its signature")
     sp.add_argument("spec")
     sp.add_argument("--signature", help="signature file (default: <spec>.signature.json)")
+    sp.add_argument(
+        "--require-cryptographic",
+        action="store_true",
+        help="fail unless the signature has a valid cryptographic signature",
+    )
     _add_format(sp)
     sp.set_defaults(func=cmd_verify_signature)
 

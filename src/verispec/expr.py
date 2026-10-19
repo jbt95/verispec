@@ -858,9 +858,12 @@ def _z3(node: ast.AST, zenv: dict[str, Z3Binding], tenv: dict[str, TypeSpec], ex
         if isinstance(node.op, ast.Mult):
             return a * b
         if isinstance(node.op, ast.FloorDiv):
-            return a / b
+            # Z3's integer division differs from Python when the divisor is
+            # negative. Normalize to a positive divisor before using Z3 div.
+            return z3.If(b > 0, a / b, (-a) / (-b))
         if isinstance(node.op, ast.Mod):
-            return a % b
+            quotient = z3.If(b > 0, a / b, (-a) / (-b))
+            return a - quotient * b
         raise SpecError(f"bad binop {node.op}")
     if isinstance(node, ast.Compare):
         left_node = node.left

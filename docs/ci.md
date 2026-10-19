@@ -81,12 +81,13 @@ on:
 permissions:
   contents: read
   security-events: write   # upload SARIF to code scanning
-  pull-requests: write     # comment the pull request
+  pull-requests: write     # required for comments; includes read access for approval checks
 
 jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - uses: verispec/verispec@v1
         with:
           spec: specs/bank.verispec.yaml
@@ -101,11 +102,19 @@ jobs:
 | `bound` | The bound for the bounded model checker. Default `10`. |
 | `timeout-ms` | The solver timeout per bound. Default `30000`. |
 | `python-version` | The Python version used to run VeriSpec. Default `3.11`. |
-| `version` | The VeriSpec version to install. Empty installs this repository. |
+| `version` | The pinned VeriSpec version to install. Empty installs the package bundled with the action. |
 | `comment` | Comment the pull request with the counterexample. Default `true`. |
 | `report` | Publish the HTML report as an artifact. Default `true`. |
-| `require-spec-approval` | Fail when the spec changed without a human approval. Default `true`. |
-| `approval-label` | The label that marks an approved spec change. Default `spec-approved`. |
+| `require-spec-approval` | Fail when the spec or a transitively imported spec changed without approval. Default `true`. |
+| `approval-label` | The label required for an approved spec change. Default `spec-approved`. |
+
+For pull requests, approval enforcement requires `pull-requests: read` (or
+`write` when PR comments are enabled). A changed spec dependency must have
+the configured label and a non-bot approval review on the current PR head
+commit; an approval from an earlier commit does not count. The action checks
+the complete import chain and fails closed if it cannot inspect it. Use
+`actions/checkout` before this action. Pin the action to a reviewed commit
+SHA in security-sensitive workflows.
 
 The action fails the job with the real exit code, so a violation is a red
 build.
