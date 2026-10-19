@@ -6,7 +6,8 @@
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 
-[Quick start](#try-it-in-two-minutes) · [Spec format](docs/spec-format.md) · [Guarantees](docs/guarantees.md) · [CI](docs/ci.md) · [Language integrations](docs/language-integrations.md)
+[Quick start](#try-it-in-two-minutes) · [Feature tour](docs/feature-tour.md) · [Spec format](docs/spec-format.md)
+[Guarantees](docs/guarantees.md) · [CI](docs/ci.md) · [Language integrations](docs/language-integrations.md)
 
 VeriSpec turns a human-owned YAML spec (a state machine with invariants) into
 everything a team needs to keep an implementation honest, in any language:
@@ -237,6 +238,7 @@ coding agent, with the read-only rule at the top.
 
 | Document | What is in it |
 | --- | --- |
+| [`docs/feature-tour.md`](docs/feature-tour.md) | Examples across the CLI and integration features |
 | [`docs/spec-format.md`](docs/spec-format.md) | The v1 format reference |
 | [`docs/tutorial-15min.md`](docs/tutorial-15min.md) | From zero to a counterexample |
 | [`docs/ci.md`](docs/ci.md) | GitHub Actions: the action, the recipes, the release |
