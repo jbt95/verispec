@@ -1,8 +1,9 @@
 # VeriSpec in 15 minutes
 
 A hands-on tutorial. By the end of it you will have written a spec, checked
-it, found a real bug in an implementation with a counterexample, fixed the
-implementation, and proved the fix with a recorded trace.
+it, found a bug in an implementation with a counterexample, fixed the
+implementation, and checked a recorded run for conformance. A trace is
+evidence about that run—not a proof that every execution is correct.
 
 The clock is a guide, not a deadline. Each section says what you should be
 able to do when it ends.
@@ -18,6 +19,18 @@ able to do when it ends.
 | [7. Record a trace](#7-record-a-trace) | 13:00 - 15:00 | Prove the fix conforms. |
 
 Everything below uses the `bank` example that ships with the repository.
+
+```mermaid
+flowchart LR
+    Spec["Human-owned spec"] --> Check{"Bounded model check"}
+    Check -->|"No violation through k"| Bounded["bounded-proved(k)<br/>spec only"]
+    Check -->|Counterexample| Fix["Reproduce and fix the code"]
+    Fix --> Trace["Replay a recorded implementation trace"]
+    Trace -->|"Observed steps conform"| Conformance["conformance-tested<br/>this trace only"]
+```
+
+The model checker explores the spec. Trace checking observes a particular
+implementation run. Neither result covers every possible execution.
 
 ---
 

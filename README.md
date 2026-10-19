@@ -2,30 +2,39 @@
 
 **One formal spec. One contract. A counterexample instead of "the test failed".**
 
+[![CI](https://github.com/verispec/verispec/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/verispec/verispec/actions/workflows/ci.yml)
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
+
+[Quick start](#try-it-in-two-minutes) · [Spec format](docs/spec-format.md) · [Guarantees](docs/guarantees.md) · [CI](docs/ci.md) · [Language integrations](docs/language-integrations.md)
+
 VeriSpec turns a human-owned YAML spec (a state machine with invariants) into
 everything a team needs to keep an implementation honest, in any language:
 
 | From the same spec | What you get |
 | --- | --- |
-| Z3 bounded model checking | a concrete counterexample, step by step |
-| TLA+ and Lean exports | the design, stated for the model checkers |
+| Z3 bounded model checking | A concrete counterexample, step by step |
+| TLA+ and Lean exports | The design, stated for other verification tools |
 | Generated property tests | Hypothesis, fast-check, rapid, proptest, jqwik |
-| Trace conformance | a check that your real code follows the contract |
-| An agent brief and an MCP server | feedback a coding agent cannot argue with |
+| Trace conformance | A check that your real code follows the contract |
+| An agent brief and an MCP server | Structured feedback for coding agents |
 
 The spec belongs to a human. Agents read it; they never edit it to make a
 check pass.
 
-```
-                ┌──────────── spec YAML (canonical, human owned, read-only for agents) ────────────┐
-                │ vars · init · actions (requires/effects) · invariants · imports                    │
-                └───────┬───────────────┬──────────────────┬───────────────────┬────────────────────┘
-                        ▼               ▼                  ▼                   ▼
-                   Z3 BMC          TLA+ / Lean        generated tests      trace conformance
-                (counterexample)     exports        (any language)        (any language)
-                        └───────────────┴──────────────┴───────────────────┘
-                                        │
-                       CI check ── SARIF ── PR comment with the counterexample
+```mermaid
+flowchart TB
+    Spec["Human-owned YAML contract<br/>state · actions · invariants"]
+    Spec --> BMC["Z3 bounded model checking"]
+    Spec --> Exports["TLA+ and Lean exports"]
+    Spec --> Tests["Generated property tests"]
+    Spec --> Adapter["Language adapter"]
+    Adapter --> Trace["Observed execution trace"]
+    Trace --> Conformance["Trace conformance check"]
+    BMC --> Evidence["Bounded result or counterexample"]
+    Tests --> Evidence
+    Conformance --> Evidence
+    Evidence --> CI["Customer-controlled CI<br/>JSON · SARIF · review feedback"]
 ```
 
 ## Try it in two minutes
@@ -171,8 +180,10 @@ The same job is available as a Docker image
 (`docker run --rm -v "$PWD:/work" -w /work verispec check specs/bank.verispec.yaml`),
 and the CLI's exit codes and `--format json` output work in any pipeline.
 
-The spec is human owned: if a pull request changes the spec, the Action
-requires a human approval label before it lets the change through.
+The spec is human owned: when a pull request changes the spec or an
+imported dependency, the Action requires the configured approval label and a
+non-author human approval review on the current PR head. See
+[the CI guide](docs/ci.md) for the permissions and race checks.
 
 ## What VeriSpec does not claim
 
@@ -185,6 +196,11 @@ VeriSpec labels every result with the guarantee it carries:
 | `signature-verified` | The spec still matches the digest a human approved. |
 | `violation-found` | A concrete counterexample exists. |
 | `unknown` | The checker could not decide. Treat it as inconclusive. |
+
+Digest-only signature verification detects changes but does not
+cryptographically authenticate the approver. When identity matters, sign with
+GPG and verify with `--require-cryptographic`; see
+[the guarantee details](docs/guarantees.md).
 
 A spec that cannot fail is a spec that proves nothing, so `verispec lint`
 reports tautological invariants, actions that can never be enabled, and
@@ -231,21 +247,19 @@ coding agent, with the read-only rule at the top.
 | [`docs/adrs/`](docs/adrs/) | The decisions, with their reasons |
 | [`rfcs/`](rfcs/) | The spec format change process |
 
-## Status and roadmap
+## Project status
 
-VeriSpec is free and open source (Apache-2.0), with no paid tiers and no
-reserved features. The roadmap, in order:
+VeriSpec is an Apache-2.0 local verification toolkit for customer-controlled
+CI—not a hosted verification service. Run the CLI locally or in your own
+pipeline; the optional GitHub Action uses only the permissions granted to that
+workflow. Language support and implementation maturity are listed in
+[Language integrations](docs/language-integrations.md).
 
-1. **Validation** - pilot projects, a spec format RFC, the first CI users.
-2. **v1 usable** - the format v1, adapters for Python, TypeScript and Go, the
-   GitHub Action, the counterexample viewer, the MCP server.
-3. **Robustness** - more languages, deeper checkers (Kani, ESBMC), spec
-   signing, the conformance report.
-4. **Ecosystem** - an open registry of reusable specs, a Lean export, a
-   differential oracle, editor integrations.
-
-The core stays in Python until a documented trigger says otherwise
-([ADR-0001](docs/adrs/README.md)).
+The v1 format, bounded checker, trace checking, signing, report generation,
+and CI integrations are part of this repository. External Kani and ESBMC
+harnesses are starting points that you connect to your implementation; they
+are not turnkey proofs. The core stays in Python until a documented trigger
+says otherwise ([ADR-0001](docs/adrs/README.md)).
 
 ## Contributing
 

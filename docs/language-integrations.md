@@ -4,6 +4,18 @@ VeriSpec is language agnostic by design. The spec is verified once, and the
 implementation is checked against it from whatever language it is written in.
 There is exactly one language-specific piece: the **adapter**.
 
+```mermaid
+flowchart LR
+    Spec["Shared VeriSpec contract"] --> Generator["Language-specific test generator"]
+    Generator --> Tests["Generated property tests"]
+    Tests --> Adapter["Adapter around real code"]
+    Adapter --> Trace["Recorded JSON trace"]
+    Trace --> Checker["Shared trace conformance checker"]
+```
+
+The spec, result semantics, and trace format stay shared; the adapter is the
+seam between VeriSpec and the implementation language.
+
 - [Coverage](#coverage)
 - [The contract, in every language](#the-contract-in-every-language)
 - [Python](#python)

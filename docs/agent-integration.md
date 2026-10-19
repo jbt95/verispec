@@ -8,6 +8,20 @@ The rule that makes this work: **the spec is human owned and read-only for
 agents.** The agent never edits the spec to make a test pass. When the
 contract and the code disagree, the code is what changes.
 
+```mermaid
+sequenceDiagram
+    participant Human
+    participant Spec as Read-only spec
+    participant Agent
+    participant MCP as VeriSpec MCP
+    Human->>Spec: Approves the contract
+    Agent->>Spec: Reads the contract
+    Agent->>MCP: verify(spec, bound)
+    MCP-->>Agent: Bounded result or counterexample
+    Agent->>Agent: Fix implementation, never the spec
+    Agent->>MCP: Verify again
+```
+
 - [The three tools](#the-three-tools)
 - [Running the server](#running-the-server)
 - [The MCP tools](#the-mcp-tools)
@@ -132,15 +146,16 @@ agent should read before it writes any code.
 {
   "spec": "Bank",
   "invariants": [
-    {"name": "total_conserved", "expr": "balance_a + balance_b == 100", "guarantee": "bounded-proved(k)"},
-    {"name": "non_negative", "expr": "balance_a >= 0 and balance_b >= 0", "guarantee": "bounded-proved(k)"}
-  ]
+    {"name": "total_conserved", "expr": "balance_a + balance_b == 100", "guarantee": "not-checked"},
+    {"name": "non_negative", "expr": "balance_a >= 0 and balance_b >= 0", "guarantee": "not-checked"}
+  ],
+  "note": "Listing invariants does not run the checker or establish a guarantee."
 }
 ```
 
-The `guarantee` on an invariant is the label the checker carries for it, not
-a claim that the invariant holds for all depths. See
-[`docs/guarantees.md`](guarantees.md).
+The `not-checked` marker is deliberate: `list_invariants` describes the
+contract but does not prove the invariants. Call `verify` to run the checker.
+See [Guarantees](guarantees.md) for the scope of each verification result.
 
 ## The counterexample is the feedback signal
 
@@ -162,7 +177,7 @@ An agent that gets this back should:
 3. **Fix the code, not the contract.** The invariant `non_negative` said
    what it always said. Editing the spec to remove it would hide the defect
    from every future reader.
-4. **Re-run.** `verify` again, and get `bounded-proved(k)`.
+4. **Re-run.** Call `verify` again. If the checker decides every depth through the requested bound, report `bounded-proved(k)`; if it returns `unknown`, report the result as inconclusive.
 
 The `guidance` field in the response says the same thing in one line, and it
 is there so the agent reads it.
@@ -268,8 +283,8 @@ The spec belongs to a human. Concretely:
 | An agent never edits the spec. | The spec is the contract. An agent that edits it can make any test pass. |
 | An agent never edits an invariant, a precondition or a bound. | That is the same thing as editing the spec, with extra steps. |
 | An agent reports a suspected spec defect and stops. | Only a human can decide whether the contract or the code is wrong. |
-| The spec is signed, and the signature is checked in CI. | The digest catches a spec that changed after a human approved it. |
-| A pull request that changes the spec needs a human approval label. | The change is reviewed by a person, not merged by an agent. |
+| If your policy requires signatures, check them in CI. | A digest detects later changes; require a cryptographic signature when approver identity must be authenticated. |
+| A pull request that changes the spec needs the configured label and a non-author human approval on the current PR head. | Stale approvals and label-only approval do not pass the gate. |
 
 The mechanism is described in [`docs/ci.md`](ci.md). The digest is:
 

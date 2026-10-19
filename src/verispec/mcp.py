@@ -6,7 +6,8 @@ It offers three tools:
 * ``verify``          - check a spec (and optionally a trace) and return a
                         structured counterexample;
 * ``describe_spec``   - summarise the contract: state, actions, invariants;
-* ``list_invariants`` - the invariants with their guarantee level.
+* ``list_invariants`` - list invariant expressions without checking them;
+                      each carries the marker ``not-checked``.
 
 The counterexample is the point: an agent that breaks the contract gets a
 concrete, reproducible failure instead of "the test failed".

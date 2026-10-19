@@ -1,8 +1,9 @@
 # Guarantees
 
-Every VeriSpec result carries a label that says exactly what was established.
-There are five labels, and no others. A result without a label is a result
-without meaning.
+Every verification result carries a label that says exactly what was
+established. There are five verification labels; a result without one has no
+clear scope. The MCP `list_invariants` response uses `not-checked` to say
+that listing an invariant did not run a check—that is not a guarantee label.
 
 - [The labels](#the-labels)
 - [What each label proves](#what-each-label-proves)
@@ -13,6 +14,23 @@ without meaning.
 - [Words to use, and words to avoid](#words-to-use-and-words-to-avoid)
 
 ---
+
+## How to read the outcomes
+
+```mermaid
+flowchart TD
+    Check["verispec check<br/>explores the spec"] --> Result{"Solver result"}
+    Result -->|Counterexample| Violation["violation-found"]
+    Result -->|"No violation through requested k"| Bounded["bounded-proved(k)"]
+    Result -->|"Undecided before any completed bound"| Unknown["unknown<br/>inconclusive; fail closed"]
+    Result -->|"Undecided after completed bound j"| Earlier["bounded-proved(j)<br/>deeper search remains unknown"]
+    Trace["verispec check-trace"] --> Conformance["conformance-tested<br/>this recorded trace only"]
+    Signature["verispec verify-signature"] --> Digest["Digest matches approved spec<br/>GPG authenticity only if signed"]
+```
+
+The diagram separates three questions: what the model checker established,
+what one observed trace conformed to, and whether the spec still matches its
+approved digest.
 
 ## The labels
 
