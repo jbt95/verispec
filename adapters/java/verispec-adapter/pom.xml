@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The VeriSpec Java adapter SDK.
+
+  The published artifact has NO dependencies at all: the adapter contract, the
+  trace recorder and the JSON writer are plain Java 17.  There is no shading
+  and no relocation, because there is nothing to shade: a user can drop the
+  jar into a project without it dragging a JSON library into the build.
+
+  JUnit 5 and jqwik are test scoped only.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>dev.verispec</groupId>
+    <artifactId>verispec-adapter-parent</artifactId>
+    <version>0.1.0</version>
+    <relativePath>../pom.xml</relativePath>
+  </parent>
+
+  <groupId>dev.verispec</groupId>
+  <artifactId>verispec-adapter</artifactId>
+  <version>0.1.0</version>
+  <packaging>jar</packaging>
+
+  <name>VeriSpec Java adapter</name>
+  <description>
+    The VeriSpec adapter contract for Java and Kotlin: reset(), apply(action,
+    params), snapshot(), plus a trace recorder that writes the canonical
+    VeriSpec trace JSON.
+  </description>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>net.jqwik</groupId>
+      <artifactId>jqwik</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+      </plugin>
+    </plugins>
+  </build>
+</project>

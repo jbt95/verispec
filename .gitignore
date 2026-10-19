@@ -5,3 +5,20 @@ __pycache__/
 .hypothesis/
 *.egg-info/
 dist/
+build/
+.ruff_cache/
+.mypy_cache/
+
+# Rust adapter build artifacts
+adapters/rust/target/
+adapters/rust/Cargo.lock
+
+# C adapter build artifacts
+adapters/c/build/
+adapters/c/*.o
+adapters/c/*.a
+
+# Node
+node_modules/
+editors/vscode/out/
+editors/vscode/*.vsix

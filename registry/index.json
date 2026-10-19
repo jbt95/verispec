@@ -1,0 +1,57 @@
+{
+  "registry_version": "1.0",
+  "description": "Reusable VeriSpec spec packages. Open: fork it, host it, point the CLI at it with --registry.",
+  "entries": [
+    {
+      "name": "ledger",
+      "description": "Two account double entry ledger: the total is conserved, no account goes negative.",
+      "path": "ledger/ledger.verispec.yaml",
+      "category": "money",
+      "tags": [
+        "ledger",
+        "accounting",
+        "balance",
+        "map"
+      ],
+      "version": "1.0"
+    },
+    {
+      "name": "idempotency",
+      "description": "A request is applied at most once; the seen set and the counter stay in sync.",
+      "path": "idempotency/idempotency.verispec.yaml",
+      "category": "api",
+      "tags": [
+        "idempotency",
+        "retry",
+        "set",
+        "api"
+      ],
+      "version": "1.0"
+    },
+    {
+      "name": "saga",
+      "description": "A two step saga with compensation and exclusive terminal states.",
+      "path": "saga/saga.verispec.yaml",
+      "category": "workflow",
+      "tags": [
+        "saga",
+        "workflow",
+        "compensation",
+        "state machine"
+      ],
+      "version": "1.0"
+    },
+    {
+      "name": "rate-limiter",
+      "description": "A token bucket: the bucket never holds more tokens than its capacity.",
+      "path": "rate-limiter/rate-limiter.verispec.yaml",
+      "category": "traffic",
+      "tags": [
+        "rate limit",
+        "token bucket",
+        "capacity"
+      ],
+      "version": "1.0"
+    }
+  ]
+}

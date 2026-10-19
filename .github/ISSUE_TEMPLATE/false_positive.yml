@@ -1,0 +1,66 @@
+name: False positive report
+description: "Report a counterexample or a rejected trace that VeriSpec reports but that is not a real violation."
+title: "[false positive] "
+labels:
+  - false-positive
+body:
+  - type: input
+    id: spec-file
+    attributes:
+      label: "Spec file"
+      description: "Path to the spec file in this repository, or a link to it if it lives elsewhere."
+      placeholder: "examples/bank.yaml"
+    validations:
+      required: true
+  - type: textarea
+    id: trace
+    attributes:
+      label: "Counterexample trace"
+      description: "Paste the full counterexample or rejected trace exactly as VeriSpec printed it."
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: bound
+    attributes:
+      label: "Bound used"
+      description: "The `--bound` value (or the depth) used for the run."
+      placeholder: "10"
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: "Why this is a false positive"
+      description: "Explain why the reported counterexample does not violate the spec: the invariant is unreachable, the precondition is satisfied, the trace is not reachable, the encoding is wrong, and so on."
+    validations:
+      required: true
+  - type: dropdown
+    id: impact
+    attributes:
+      label: "Impact"
+      description: "What does the false positive cost you?"
+      options:
+        - "Blocks CI"
+        - "Noise (easy to ignore, but erodes trust in the tool)"
+        - "Slows the run down noticeably"
+        - "Wrong behaviour in a downstream tool"
+        - "Other"
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: "Additional context"
+      description: "The exact command, the VeriSpec version, the language and adapter involved."
+    validations:
+      required: false
+  - type: checkboxes
+    id: attestation
+    attributes:
+      label: "Attestation"
+      options:
+        - label: "I did not weaken the spec, the invariant, or the bound to hide the counterexample"
+          required: true
+        - label: "The spec is human-approved"
+          required: true

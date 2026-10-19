@@ -1,0 +1,25 @@
+{
+  "name": "@verispec/orders-api-example",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The VeriSpec orders API example, implemented in TypeScript: one spec, three implementations.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/orders-api.js",
+  "types": "./dist/orders-api.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "gen": "verispec gen-tests ../../orders.verispec.yaml --lang typescript -o orders.verispec.test.ts",
+    "pretest": "npm run gen",
+    "test": "npm run build && node --test dist/test/",
+    "start": "node dist/serve.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "fast-check": "^3.20.0",
+    "typescript": "^5.5.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

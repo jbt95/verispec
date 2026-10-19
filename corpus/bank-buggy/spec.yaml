@@ -1,0 +1,29 @@
+spec_version: "1.0"
+name: Bank
+description: >
+  BUGGY variant of the bank spec: transfer_a_to_b has no balance check, so an
+  account can go negative.  VeriSpec finds the counterexample in two steps.
+vars:
+  balance_a: {type: int, min: 0, max: 100}
+  balance_b: {type: int, min: 0, max: 100}
+init:
+  balance_a: "50"
+  balance_b: "50"
+actions:
+  - name: transfer_a_to_b
+    params:
+      amount: {type: int, min: 1, max: 50}
+    requires: ["amount > 0"]
+    effects:
+      balance_a: "balance_a - amount"
+      balance_b: "balance_b + amount"
+  - name: transfer_b_to_a
+    params:
+      amount: {type: int, min: 1, max: 50}
+    requires: ["amount > 0", "balance_b >= amount"]
+    effects:
+      balance_b: "balance_b - amount"
+      balance_a: "balance_a + amount"
+invariants:
+  - {name: total_conserved, expr: "balance_a + balance_b == 100"}
+  - {name: non_negative, expr: "balance_a >= 0 and balance_b >= 0"}

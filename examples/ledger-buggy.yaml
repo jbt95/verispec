@@ -1,0 +1,49 @@
+spec_version: "1.0"
+name: Ledger
+description: >
+  BUGGY variant of the ledger spec: the posting does not check that the
+  source account can cover the amount, so a balance can go negative.  The
+  spec also loses the reference of the previous posting, which breaks the
+  idempotency set.
+vars:
+  balances:
+    type: map
+    key: int
+    key_min: 0
+    key_max: 1
+    value: int
+    value_min: 0
+    value_max: 1000
+    max_size: 2
+  total: {type: int, min: 0, max: 1000}
+  posted:
+    type: set
+    of: str
+    elem_domain: [p-1, p-2, p-3, p-4]
+    max_size: 4
+init:
+  balances: {0: 100, 1: 0}
+  total: "100"
+  posted: []
+actions:
+  - name: post
+    params:
+      from_account: {type: int, min: 0, max: 1}
+      to_account: {type: int, min: 0, max: 1}
+      amount: {type: int, min: 1, max: 100}
+      reference: {type: "enum[p-1,p-2,p-3,p-4]"}
+    requires:
+      - "amount > 0"
+      - "from_account != to_account"
+      - "reference not in posted"
+    effects:
+      balances: >
+        map_set(
+          map_set(balances, from_account, map_get(balances, from_account) - amount),
+          to_account, map_get(balances, to_account) + amount)
+      total: "total"
+      posted: "set_add(posted, reference)"
+invariants:
+  - {name: total_conserved, expr: "map_get(balances, 0) + map_get(balances, 1) == total"}
+  - {name: no_negative, expr: "map_get(balances, 0) >= 0 and map_get(balances, 1) >= 0"}
+  - {name: postings_bounded, expr: "len(posted) <= 4"}

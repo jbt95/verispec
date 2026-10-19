@@ -1,0 +1,134 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Tests, lint and types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev,api]"
+      - name: Ruff
+        run: ruff check .
+      - name: Mypy
+        run: mypy src/verispec
+      - name: Pytest
+        run: pytest -q
+      - name: Conformance corpus
+        run: verispec corpus corpus --bound 8
+      - name: The examples still check out
+        run: |
+          verispec check examples/bank.yaml --bound 6
+          verispec check examples/ledger.yaml --bound 4
+          ! verispec check examples/bank-buggy.yaml --bound 6
+          ! verispec check examples/ledger-buggy.yaml --bound 4
+
+  self-check:
+    name: VeriSpec checks its own specs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install -e ".[test]"
+      - name: Check the corpus specs
+        run: |
+          for spec in corpus/*/spec.yaml; do
+            echo "::group::$spec"
+            verispec check "$spec" --bound 8 || true
+            echo "::endgroup::"
+          done
+
+  adapters:
+    name: Adapters
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install
+        run: |
+          python -m pip install -e ".[test]"
+      - name: Rust adapter
+        working-directory: adapters/rust
+        run: cargo test
+      - name: C adapter
+        working-directory: adapters/c
+        run: make test
+      - name: Go adapter
+        working-directory: adapters/go
+        run: go test ./...
+      - name: TypeScript adapter
+        working-directory: adapters/typescript
+        run: |
+          npm install --no-audit --no-fund
+          npm test
+      - name: The orders API example (TypeScript)
+        working-directory: examples/orders-api/implementations/typescript
+        run: |
+          npm install --no-audit --no-fund
+          npm test
+      - name: The orders API example (Go)
+        working-directory: examples/orders-api/implementations/go
+        run: go test ./...
+
+  java:
+    name: Java adapter
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Download the test dependencies
+        run: |
+          mkdir -p "$HOME/jars"
+          cd "$HOME/jars"
+          curl -sSLO https://repo1.maven.org/maven2/org/junit/platform/junit-platform-console-standalone/1.10.2/junit-platform-console-standalone-1.10.2.jar
+          for a in jqwik-api jqwik-engine jqwik-time jqwik-web; do
+            curl -sSLO "https://repo1.maven.org/maven2/net/jqwik/$a/1.8.4/$a-1.8.4.jar"
+          done
+          curl -sSLO https://repo1.maven.org/maven2/org/opentest4j/opentest4j/1.3.0/opentest4j-1.3.0.jar
+          curl -sSLO https://repo1.maven.org/maven2/org/apiguardian/apiguardian-api/1.1.2/apiguardian-api-1.1.2.jar
+      - name: Compile and run the Java conformance suite
+        working-directory: adapters/java
+        run: |
+          set -euo pipefail
+          CP=$(find "$HOME/jars" -name "*.jar" | tr '\n' ':')
+          mkdir -p out
+          javac --release 17 -Xlint:all -cp "$CP" -d out \
+            $(find verispec-adapter/src verispec-conformance/src -name "*.java")
+          java -cp "out:$CP" org.junit.platform.console.ConsoleLauncher \
+            --select-package=dev.verispec --details=summary
+
+  docker:
+    name: Docker image builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the image
+        run: docker build -t verispec:ci .
+      - name: Smoke test
+        run: |
+          docker run --rm -v "$PWD:/work" -w /work verispec:ci validate examples/bank.yaml

@@ -1,0 +1,159 @@
+spec_version: "1.0"
+name: OrdersApi
+description: >
+  A bounded model of an orders API: products with stock, orders that move
+  through a lifecycle, payments that may only be applied once, and shipments
+  that consume the reserved stock.
+
+  This is the contract of a real REST API (see `app.py`): every action here is
+  one endpoint, and every invariant here is a business rule that the
+  implementation must not break.
+
+  The model is bounded on purpose: two products, two orders and two
+  idempotency keys. A bounded model is what makes the exhaustive search
+  possible; the implementation is not bounded, it is a real database.
+vars:
+  # Inventory, per product.
+  stock:
+    type: map
+    key: int
+    key_min: 0
+    key_max: 1
+    value: int
+    value_min: 0
+    value_max: 10
+    max_size: 2
+  reserved:
+    type: map
+    key: int
+    key_min: 0
+    key_max: 1
+    value: int
+    value_min: 0
+    value_max: 10
+    max_size: 2
+  # Orders, per order id.  A map value must be a scalar, so an order is
+  # modelled as one map per field, the usual relational encoding of a bounded
+  # model.
+  order_product:
+    type: map
+    key: int
+    key_min: 0
+    key_max: 1
+    value: int
+    value_min: 0
+    value_max: 1
+    max_size: 2
+  order_quantity:
+    type: map
+    key: int
+    key_min: 0
+    key_max: 1
+    value: int
+    value_min: 1
+    value_max: 10
+    max_size: 2
+  order_state:
+    type: map
+    key: int
+    key_min: 0
+    key_max: 1
+    value: "enum[none,pending,reserved,paid,shipped,cancelled]"
+    max_size: 2
+  order_amount:
+    type: map
+    key: int
+    key_min: 0
+    key_max: 1
+    value: int
+    value_min: 0
+    value_max: 1000
+    max_size: 2
+  # Payments, keyed by the client's idempotency key.
+  paid_keys:
+    type: set
+    of: str
+    elem_domain: [k1, k2]
+    max_size: 2
+  # Derived from the paid orders.
+  revenue: {type: int, min: 0, max: 1000}
+  orders_created: {type: int, min: 0, max: 2}
+init:
+  stock: {0: 5, 1: 3}
+  reserved: {0: 0, 1: 0}
+  order_product: {}
+  order_quantity: {}
+  order_state: {}
+  order_amount: {}
+  paid_keys: []
+  revenue: "0"
+  orders_created: "0"
+actions:
+  - name: place_order
+    params:
+      order_id: {type: int, min: 0, max: 1}
+      product: {type: int, min: 0, max: 1}
+      quantity: {type: int, min: 1, max: 10}
+    requires:
+      - "order_id == orders_created"
+      - "quantity > 0"
+    effects:
+      order_product: "map_set(order_product, order_id, product)"
+      order_quantity: "map_set(order_quantity, order_id, quantity)"
+      order_state: "map_set(order_state, order_id, \"pending\")"
+      order_amount: "map_set(order_amount, order_id, quantity * 10)"
+      orders_created: "orders_created + 1"
+  - name: reserve
+    params:
+      order_id: {type: int, min: 0, max: 1}
+      product: {type: int, min: 0, max: 1}
+    requires:
+      - "map_get(order_state, order_id) == \"pending\""
+      - "map_get(order_product, order_id) == product"
+      - "map_get(stock, product) - map_get(reserved, product) >= map_get(order_quantity, order_id)"
+    effects:
+      reserved: "map_set(reserved, product, map_get(reserved, product) + map_get(order_quantity, order_id))"
+      order_state: "map_set(order_state, order_id, \"reserved\")"
+  - name: pay
+    params:
+      order_id: {type: int, min: 0, max: 1}
+      key: {type: "enum[k1,k2]"}
+    requires:
+      - "map_get(order_state, order_id) == \"reserved\""
+      - "key not in paid_keys"
+    effects:
+      paid_keys: "set_add(paid_keys, key)"
+      revenue: "revenue + map_get(order_amount, order_id)"
+      order_state: "map_set(order_state, order_id, \"paid\")"
+  - name: ship
+    params:
+      order_id: {type: int, min: 0, max: 1}
+    requires:
+      - "map_get(order_state, order_id) == \"paid\""
+    effects:
+      order_state: "map_set(order_state, order_id, \"shipped\")"
+      stock: "map_set(stock, map_get(order_product, order_id), map_get(stock, map_get(order_product, order_id)) - map_get(order_quantity, order_id))"
+      reserved: "map_set(reserved, map_get(order_product, order_id), map_get(reserved, map_get(order_product, order_id)) - map_get(order_quantity, order_id))"
+  - name: cancel
+    params:
+      order_id: {type: int, min: 0, max: 1}
+    requires:
+      - "map_get(order_state, order_id) == \"pending\" or map_get(order_state, order_id) == \"reserved\""
+    effects:
+      order_state: "map_set(order_state, order_id, \"cancelled\")"
+      reserved: "map_set(reserved, map_get(order_product, order_id), map_get(reserved, map_get(order_product, order_id)) - (map_get(order_quantity, order_id) if map_get(order_state, order_id) == \"reserved\" else 0))"
+invariants:
+  # Business rule 1: you can never reserve more than what is on the shelf.
+  - {name: no_overselling, expr: "map_get(reserved, 0) <= map_get(stock, 0) and map_get(reserved, 1) <= map_get(stock, 1)"}
+  - {name: stock_never_negative, expr: "map_get(stock, 0) >= 0 and map_get(stock, 1) >= 0"}
+  # Business rule 2: a payment is applied at most once, so the number of
+  # payment keys is the number of paid orders.
+  - {name: one_payment_per_order, expr: "len(paid_keys) == (1 if map_get(order_state, 0) == \"paid\" or map_get(order_state, 0) == \"shipped\" else 0) + (1 if map_get(order_state, 1) == \"paid\" or map_get(order_state, 1) == \"shipped\" else 0)"}
+  # Business rule 3: the revenue is exactly what the paid orders are worth.
+  - {name: revenue_matches_paid_orders, expr: "revenue == (map_get(order_amount, 0) if map_get(order_state, 0) == \"paid\" or map_get(order_state, 0) == \"shipped\" else 0) + (map_get(order_amount, 1) if map_get(order_state, 1) == \"paid\" or map_get(order_state, 1) == \"shipped\" else 0)"}
+  # The order counter and the orders that exist agree.
+  - {name: orders_created_matches_orders, expr: "orders_created == (1 if map_get(order_state, 0) != \"none\" else 0) + (1 if map_get(order_state, 1) != \"none\" else 0)"}
+  # An order that exists has a positive quantity.
+  - {name: order_quantity_positive, expr: "map_get(order_state, 0) == \"none\" or map_get(order_quantity, 0) >= 1"}
+  - {name: order_quantity_positive_1, expr: "map_get(order_state, 1) == \"none\" or map_get(order_quantity, 1) >= 1"}
+  - {name: revenue_non_negative, expr: "revenue >= 0"}

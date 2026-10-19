@@ -1,0 +1,12 @@
+[package]
+name = "verispec-adapter"
+version = "0.1.0"
+edition = "2021"
+description = "The VeriSpec adapter SDK for Rust: the runtime helpers and the trace recorder."
+license = "Apache-2.0"
+publish = false
+
+[dependencies]
+serde_json = "1"
+
+[dev-dependencies]

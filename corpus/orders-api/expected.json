@@ -1,0 +1,10 @@
+{
+  "bound": 6,
+  "check": {
+    "status": "ok",
+    "violated": []
+  },
+  "trace": {
+    "ok": true
+  }
+}

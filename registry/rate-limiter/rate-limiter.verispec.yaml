@@ -1,0 +1,27 @@
+spec_version: "1.0"
+name: RateLimiter
+description: >
+  A token bucket with a fixed capacity.  Refills are bounded by the capacity
+  and the bucket never holds more tokens than the capacity.
+vars:
+  tokens: {type: int, min: 0, max: 10}
+  capacity: {type: int, min: 1, max: 10}
+init:
+  tokens: "3"
+  capacity: "3"
+actions:
+  - name: consume
+    params:
+      amount: {type: int, min: 1, max: 5}
+    requires: ["amount > 0", "tokens >= amount"]
+    effects:
+      tokens: "tokens - amount"
+  - name: refill
+    params:
+      amount: {type: int, min: 1, max: 5}
+    requires: ["amount > 0"]
+    effects:
+      tokens: "min(tokens + amount, capacity)"
+invariants:
+  - {name: never_over_capacity, expr: "tokens <= capacity"}
+  - {name: never_negative, expr: "tokens >= 0"}

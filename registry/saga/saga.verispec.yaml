@@ -1,0 +1,42 @@
+spec_version: "1.0"
+name: Saga
+description: >
+  A two step saga with compensation.  A saga that fails half way must be able
+  to compensate, and it must never end up in both the done and the failed
+  state.
+vars:
+  state: {type: "enum[started,first_done,second_done,compensating,failed,done]"}
+  steps_done: {type: int, min: 0, max: 2}
+  compensations: {type: int, min: 0, max: 2}
+init:
+  state: started
+  steps_done: "0"
+  compensations: "0"
+actions:
+  - name: first
+    requires: ["state == \"started\""]
+    effects:
+      state: first_done
+      steps_done: "steps_done + 1"
+  - name: second
+    requires: ["state == \"first_done\""]
+    effects:
+      state: second_done
+      steps_done: "steps_done + 1"
+  - name: fail
+    requires: ["state == \"started\" or state == \"first_done\""]
+    effects:
+      state: compensating
+  - name: compensate
+    requires: ["state == \"compensating\""]
+    effects:
+      state: failed
+      compensations: "compensations + 1"
+  - name: commit
+    requires: ["state == \"second_done\""]
+    effects:
+      state: done
+invariants:
+  - {name: terminal_is_exclusive, expr: "not (state == \"done\" and state == \"failed\")"}
+  - {name: steps_bounded, expr: "steps_done <= 2"}
+  - {name: compensations_bounded, expr: "compensations <= 2"}

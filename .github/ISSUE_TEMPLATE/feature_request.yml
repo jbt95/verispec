@@ -1,0 +1,61 @@
+name: Feature request
+description: Propose a new feature for VeriSpec, the CLI, the adapters, or the tooling.
+title: "[feature] "
+labels:
+  - enhancement
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the project does this affect?
+      options:
+        - Spec format
+        - CLI
+        - CI integration
+        - Adapters
+        - MCP / agent integration
+        - Docs
+        - Registry
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do that VeriSpec does not support today? Describe the situation, not the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What you would like VeriSpec to do, and roughly how you would expect it to behave.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What other approaches did you try or consider, and why they do not work for you?
+    validations:
+      required: true
+  - type: dropdown
+    id: rfc-needed
+    attributes:
+      label: Does this require a spec-format RFC?
+      description: Does the proposal add, remove, or change a construct in the spec format?
+      options:
+        - "Yes, it changes the spec format (an RFC is required)"
+        - "No, it only affects the implementation or the tooling"
+        - "Not sure"
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Specs, traces, code, or links that illustrate the problem.
+    validations:
+      required: false

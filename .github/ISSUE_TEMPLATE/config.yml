@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or discussion
+    url: https://github.com/jbt95/verispec/discussions
+    about: Ask a question, propose an idea, or discuss a use case. Use discussions instead of an issue for anything that is not a defect or a concrete proposal.
+  - name: Report a security vulnerability
+    url: https://github.com/jbt95/verispec/security/advisories/new
+    about: Report a vulnerability privately. Do not open a public issue for security problems.

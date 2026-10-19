@@ -1,5 +1,8 @@
+spec_version: "1.0"
 name: Bank
-description: BUGGY variant - transfer_a_to_b has no balance check, so balance_a can go negative.
+description: >
+  BUGGY variant of the bank spec: transfer_a_to_b has no balance check, so an
+  account can go negative.  VeriSpec finds the counterexample in two steps.
 vars:
   balance_a: {type: int, min: 0, max: 100}
   balance_b: {type: int, min: 0, max: 100}

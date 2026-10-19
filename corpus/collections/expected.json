@@ -1,0 +1,9 @@
+{
+  "check": {
+    "status": "violation",
+    "violated": [
+      "history_bounded",
+      "history_capacity"
+    ]
+  }
+}

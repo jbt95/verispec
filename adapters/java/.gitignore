@@ -1,0 +1,4 @@
+# Build outputs of the Maven and Gradle builds.
+build/
+target/
+.gradle/

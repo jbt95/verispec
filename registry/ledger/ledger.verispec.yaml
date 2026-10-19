@@ -1,0 +1,39 @@
+spec_version: "1.0"
+name: Ledger
+description: >
+  A two account double entry ledger.  Postings move value between accounts,
+  the total is conserved and no account may go negative.  A good starting
+  point for money-like state.
+vars:
+  balances:
+    type: map
+    key: int
+    key_min: 0
+    key_max: 1
+    value: int
+    value_min: 0
+    value_max: 1000
+    max_size: 2
+  total: {type: int, min: 0, max: 1000}
+init:
+  balances: {0: 100, 1: 0}
+  total: "100"
+actions:
+  - name: post
+    params:
+      from_account: {type: int, min: 0, max: 1}
+      to_account: {type: int, min: 0, max: 1}
+      amount: {type: int, min: 1, max: 100}
+    requires:
+      - "amount > 0"
+      - "from_account != to_account"
+      - "map_get(balances, from_account) >= amount"
+    effects:
+      balances: >
+        map_set(
+          map_set(balances, from_account, map_get(balances, from_account) - amount),
+          to_account, map_get(balances, to_account) + amount)
+      total: "total"
+invariants:
+  - {name: total_conserved, expr: "map_get(balances, 0) + map_get(balances, 1) == total"}
+  - {name: no_negative, expr: "map_get(balances, 0) >= 0 and map_get(balances, 1) >= 0"}

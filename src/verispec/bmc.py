@@ -1,132 +1,538 @@
+"""Bounded model checking of a VeriSpec spec with Z3.
+
+The checker encodes the spec as a transition system and asks Z3 for a state
+that violates an invariant.  Collections are encoded as Z3 arrays plus an
+explicit size counter, so every read is total and no phantom counterexample
+can appear.
+
+The guarantee produced is *bounded*: "no violation up to bound K".  It is
+never a proof for all depths, and the result says so explicitly.
+"""
+
+from __future__ import annotations
+
+from typing import Any
 
 import z3
-from .expr import to_z3, SpecError
-from .model import initial_state
 
-def _z3_var(spec, base, step):
-    v=spec.vars[base]
-    name=f"{base}_{step}"
-    if v.kind=="bool": return z3.Bool(name)
-    return z3.Int(name)  # int and enum (as index)
+from .expr import (
+    SpecError,
+    Z3Binding,
+    Z3Map,
+    Z3Record,
+    Z3Seq,
+    Z3Set,
+    to_z3,
+    z3_array_sort,
+    z3_default,
+    z3_sort_for,
+)
+from .model import Spec, initial_state
+from .types import EnumType, MapType, RecordType, SeqType, SetType
+from .values import value_to_json
 
-def check(spec, bound=10, invariant_filter=None, timeout_ms=30000):
-    # iterative deepening: smallest violating bound first -> shortest counterexample
-    for k in range(0, bound+1):
-        r=_check_one(spec, bound=k, invariant_filter=invariant_filter, timeout_ms=timeout_ms)
-        if r["status"]=="violation":
-            r["bound"]=bound; return r
-        if r["status"]=="unknown":
+__all__ = ["check", "format_result", "GUARANTEE_BOUNDED"]
+
+
+GUARANTEE_BOUNDED = "bounded-proved(k)"
+
+
+# --------------------------------------------------------------------------
+# state encoding
+# --------------------------------------------------------------------------
+
+
+def _slot(spec: Spec, var, step: int) -> dict[str, Any]:
+    """Create the Z3 constants that represent one variable at one step."""
+    t = var.type
+    name = var.name
+    if t.kind == "int":
+        return {"kind": "scalar", "const": z3.Int(f"{name}_{step}")}
+    if t.kind == "bool":
+        return {"kind": "scalar", "const": z3.Bool(f"{name}_{step}")}
+    if t.kind in ("str", "enum"):
+        return {"kind": "scalar", "const": z3.String(f"{name}_{step}")}
+    if t.kind == "map":
+        return {
+            "kind": "map",
+            "values": z3.Const(
+                f"{name}_v_{step}", z3_array_sort(z3.IntSort(), z3_sort_for(t.value))
+            ),
+            "present": z3.Const(
+                f"{name}_p_{step}", z3_array_sort(z3.IntSort(), z3.BoolSort())
+            ),
+            "size": z3.Int(f"{name}_n_{step}"),
+        }
+    if t.kind == "set":
+        return {
+            "kind": "set",
+            "present": z3.Const(
+                f"{name}_p_{step}", z3_array_sort(z3.IntSort(), z3.BoolSort())
+            ),
+            "size": z3.Int(f"{name}_n_{step}"),
+        }
+    if t.kind == "seq":
+        return {
+            "kind": "seq",
+            "items": z3.Const(
+                f"{name}_i_{step}", z3_array_sort(z3.IntSort(), z3_sort_for(t.elem))
+            ),
+            "size": z3.Int(f"{name}_n_{step}"),
+        }
+    if t.kind == "record":
+        return {
+            "kind": "record",
+            "fields": {
+                fname: z3.Const(f"{name}_{fname}_{step}", z3_sort_for(ft))
+                for fname, ft in t.fields
+            },
+        }
+    raise SpecError(f"var {name}: unsupported type {t.kind}")
+
+
+def _binding(var, slot: dict[str, Any]) -> Z3Binding:
+    t = var.type
+    if t.kind == "map":
+        return Z3Binding(Z3Map(slot["values"], slot["present"], slot["size"], t), t)
+    if t.kind == "set":
+        return Z3Binding(Z3Set(slot["present"], slot["size"], t), t)
+    if t.kind == "seq":
+        return Z3Binding(Z3Seq(slot["items"], slot["size"], t), t)
+    if t.kind == "record":
+        return Z3Binding(Z3Record(slot["fields"], t), t)
+    return Z3Binding(slot["const"], t)
+
+
+def _unchanged(var, cur: dict[str, Any], nxt: dict[str, Any]) -> list:
+    """Constraints saying that a variable does not change between two steps."""
+    t = var.type
+    if t.kind in ("int", "bool", "str", "enum"):
+        return [nxt["const"] == cur["const"]]
+    if t.kind == "map":
+        return [
+            nxt["values"] == cur["values"],
+            nxt["present"] == cur["present"],
+            nxt["size"] == cur["size"],
+        ]
+    if t.kind == "set":
+        return [nxt["present"] == cur["present"], nxt["size"] == cur["size"]]
+    if t.kind == "seq":
+        return [nxt["items"] == cur["items"], nxt["size"] == cur["size"]]
+    if t.kind == "record":
+        return [nxt["fields"][f] == cur["fields"][f] for f in cur["fields"]]
+    raise SpecError(f"var {var.name}: unsupported type {t.kind}")
+
+
+def _domain_index_concrete(t, domain: tuple, key: Any) -> int | None:
+    """Position of a concrete key/element inside a finite domain."""
+    for i, item in enumerate(domain):
+        if item == key and isinstance(item, bool) == isinstance(key, bool):
+            return i
+    return None
+
+
+def _encode_init(solver, spec: Spec, states: list[dict[str, Any]]) -> None:
+    """Constrain step 0 to the initial state."""
+    _encode_state(solver, spec, initial_state(spec), states[0])
+
+
+def _encode_state(solver, spec: Spec, state: dict[str, Any], slots: dict[str, Any]) -> None:
+    """Constrain one step's slots to a concrete state."""
+    init = state
+    for name, var in spec.vars.items():
+        t = var.type
+        slot = slots[name]
+        value = init[name]
+        if t.kind == "int":
+            solver.add(slot["const"] == z3.IntVal(int(value)))
+        elif t.kind == "bool":
+            solver.add(slot["const"] == z3.BoolVal(bool(value)))
+        elif t.kind in ("str", "enum"):
+            solver.add(slot["const"] == z3.StringVal(str(value)))
+        elif t.kind == "map":
+            values = z3.Const("__init_values", slot["values"].sort())
+            present = z3.Const("__init_present", slot["present"].sort())
+            values = z3.K(z3.IntSort(), z3_default(t.value))
+            present = z3.K(z3.IntSort(), z3.BoolVal(False))
+            for key, v in value.items():
+                idx = _domain_index_concrete(t.key, t.domain, key)
+                if idx is None:  # pragma: no cover - validated earlier
+                    continue
+                values = z3.Store(values, idx, _to_z3_value(t.value, v))
+                present = z3.Store(present, idx, z3.BoolVal(True))
+            solver.add(slot["values"] == values)
+            solver.add(slot["present"] == present)
+            solver.add(slot["size"] == z3.IntVal(len(value)))
+        elif t.kind == "set":
+            present = z3.K(z3.IntSort(), z3.BoolVal(False))
+            for item in value:
+                idx = _domain_index_concrete(t.elem, t.domain, item)
+                if idx is None:  # pragma: no cover - validated earlier
+                    continue
+                present = z3.Store(present, idx, z3.BoolVal(True))
+            solver.add(slot["present"] == present)
+            solver.add(slot["size"] == z3.IntVal(len(value)))
+        elif t.kind == "seq":
+            items = z3.K(z3.IntSort(), z3_default(t.elem))
+            for i, v in enumerate(value):
+                items = z3.Store(items, i, _to_z3_value(t.elem, v))
+            solver.add(slot["items"] == items)
+            solver.add(slot["size"] == z3.IntVal(len(value)))
+        elif t.kind == "record":
+            for fname, ft in t.fields:
+                solver.add(slot["fields"][fname] == _to_z3_value(ft, value[fname]))
+        else:  # pragma: no cover - unreachable
+            raise SpecError(f"var {name}: unsupported type {t.kind}")
+
+
+def _to_z3_value(t, value: Any):
+    """Encode a concrete value as a Z3 term of the right sort."""
+    if t.kind == "int":
+        return z3.IntVal(int(value))
+    if t.kind == "bool":
+        return z3.BoolVal(bool(value))
+    if t.kind in ("str", "enum"):
+        return z3.StringVal(str(value))
+    raise SpecError(f"cannot encode {t.kind} as a Z3 value")
+
+
+# --------------------------------------------------------------------------
+# checking
+# --------------------------------------------------------------------------
+
+
+def check(
+    spec: Spec,
+    bound: int = 10,
+    invariant_filter: str | None = None,
+    timeout_ms: int = 30000,
+) -> dict[str, Any]:
+    """Search for a state that violates an invariant, up to `bound` steps.
+
+    Iterative deepening gives the shortest counterexample: the first bound at
+    which a violation exists is the bound at which it is reported.
+    """
+    for k in range(0, bound + 1):
+        r = _check_one(spec, bound=k, invariant_filter=invariant_filter, timeout_ms=timeout_ms)
+        if r["status"] == "violation":
+            r["max_bound"] = bound
             return r
-    return {"status":"ok","bound":bound,"message":f"no violation up to bound {bound}"}
-def _check_one(spec, bound=10, invariant_filter=None, timeout_ms=30000):
-    invs=[i for i in spec.invariants if not invariant_filter or i["name"]==invariant_filter]
-    if invariant_filter and not invs: raise SpecError(f"invariant {invariant_filter!r} not found")
-    solver=z3.Solver(); solver.set("timeout", timeout_ms)
-    # state vars [step][varname]
-    states=[]
-    for t in range(bound+1):
-        states.append({n:_z3_var(spec,n,t) for n in spec.vars})
-    # bounds + enum range
-    for t,st in enumerate(states):
-        for n,v in spec.vars.items():
-            # NOTE: var min/max are documented modelling bounds, NOT enforced as
-            # solver axioms on states -- otherwise e.g. min:0 would axiomatically
-            # hide the very non_negative violations BMC must find. Param bounds
-            # (below) are enforced; state reachability is left to actions+invariants.
-            if v.kind=="enum": solver.add(st[n]>=0, st[n]<len(v.values))
-    # init
-    init=initial_state(spec)
-    for n,v in spec.vars.items():
-        val=init[n]
-        if v.kind=="bool": solver.add(states[0][n]==z3.BoolVal(bool(val)))
-        elif v.kind=="enum": solver.add(states[0][n]==spec.enum_map[val])
-        elif v.kind=="str": pass
-        else: solver.add(states[0][n]==int(val))
-    nact=len(spec.actions)
-    # per step action choice and params
-    for t in range(bound):
-        choice=z3.Int(f"__action_{t}"); solver.add(choice>=-1, choice<nact)
-        cur, nxt = states[t], states[t+1]
-        # build per-action condition
-        action_conds=[]
-        for ai,a in enumerate(spec.actions):
-            # param z3 vars
-            penv={}
-            for pn,pv in a.params.items():
-                pz=z3.Bool(f"{a.name}_{pn}_{t}") if pv.kind=="bool" else z3.Int(f"{a.name}_{pn}_{t}")
-                penv[pn]=pz
-                if pv.kind=="int":
-                    if pv.min is not None: solver.add(pz>=pv.min)
-                    if pv.max is not None: solver.add(pz<=pv.max)
-                if pv.kind=="enum": solver.add(pz>=0, pz<len(pv.values))
-            env={**cur, **penv}
-            req=z3.And(*[to_z3(r, env, spec.enum_map) for r in a.requires]) if a.requires else z3.BoolVal(True)
-            eff=[]
-            for vn,v in spec.vars.items():
-                if vn in a.effects: eff.append(nxt[vn]==to_z3(str(a.effects[vn]), env, spec.enum_map))
-                else: eff.append(nxt[vn]==cur[vn])
-            cond=z3.And(req, *eff)
-            action_conds.append(cond)
-            solver.add(z3.Implies(choice==ai, cond))
-        # stutter if no action enabled: choice==-1 implies all requires false and state unchanged
-        if action_conds:
-            # need requires-only for stutter: recompute quickly via choice==-1 -> state unchanged (sound for BMC search: dead-end paths stutter)
-            solver.add(z3.Implies(choice==-1, z3.And(*[nxt[n]==cur[n] for n in spec.vars])))
-        else:
-            solver.add(z3.And(*[nxt[n]==cur[n] for n in spec.vars]))
-    # violation: any invariant false at any step
-    viols=[]
-    for t,st in enumerate(states):
-        for inv in invs:
-            viols.append(z3.Not(to_z3(inv["expr"], st, spec.enum_map)))
-    solver.add(z3.Or(*viols)) if viols else None
-    res=solver.check()
-    if res==z3.unsat:
-        return {"status":"ok","bound":bound,"message":f"no violation up to bound {bound}"}
-    if res!=z3.sat:
-        return {"status":"unknown","bound":bound,"message":f"solver returned {res} up to bound {bound}"}
-    m=solver.model()
-    def decode(t):
-        st={}
-        for n,v in spec.vars.items():
-            val=m.eval(states[t][n], model_completion=True)
-            if v.kind=="bool": st[n]=z3.is_true(val)
-            elif v.kind=="enum":
-                idx=val.as_long(); st[n]=v.values[idx] if 0<=idx<len(v.values) else idx
-            else: st[n]=val.as_long()
-        return st
-    trace=[]
-    for t in range(bound+1):
-        st=decode(t)
-        entry={"step":t,"state":st}
-        if t<bound:
-            ch=m.eval(z3.Int(f"__action_{t}"), model_completion=True).as_long()
-            if 0<=ch<nact:
-                a=spec.actions[ch]; entry["action"]=a.name
-                params={}
-                for pn,pv in a.params.items():
-                    pz=z3.Bool(f"{a.name}_{pn}_{t}") if pv.kind=="bool" else z3.Int(f"{a.name}_{pn}_{t}")
-                    val=m.eval(pz, model_completion=True)
-                    if pv.kind=="bool": params[pn]=z3.is_true(val)
-                    elif pv.kind=="enum": params[pn]=pv.values[val.as_long()]
-                    else: params[pn]=val.as_long()
-                entry["params"]=params
-            else: entry["action"]="(stutter)"; entry["params"]={}
-        trace.append(entry)
-    # trim to first violating step
-    from .model import check_invariants
-    cut=bound
-    for i,e in enumerate(trace):
-        if check_invariants(spec, e["state"]): cut=i; break
-    trace=trace[:cut+1]
-    bad=check_invariants(spec, trace[-1]["state"]) if trace else []
-    return {"status":"violation","bound":bound,"trace":trace,"violated":[b["name"] for b in bad]}
+        if r["status"] == "unknown":
+            r["max_bound"] = bound
+            # the deeper bounds were decided, the shallower ones were proved
+            r["proved_up_to"] = max(k - 1, 0)
+            if k > 0:
+                r["message"] = (
+                    f"no violation up to bound {k - 1}; "
+                    f"the solver could not decide bound {k} ({r.get('reason', 'unknown')})"
+                )
+                r["guarantee"] = f"{GUARANTEE_BOUNDED.replace('(k)', f'({k - 1})')}"
+            return r
+    return {
+        "status": "ok",
+        "bound": bound,
+        "max_bound": bound,
+        "message": f"no violation up to bound {bound}",
+        "guarantee": f"{GUARANTEE_BOUNDED.replace('(k)', f'({bound})')}",
+    }
 
-def format_result(spec,result):
-    if result["status"]=="ok": return result["message"]+"  (bounded claim only, not a proof for all depths)"
-    if result["status"]!="violation": return result["message"]
-    lines=[f"COUNTEREXAMPLE found within bound {result['bound']}: invariant(s) violated: {', '.join(result.get('violated',[]))}"]
-    for e in result["trace"]:
-        lines.append(f"  step {e['step']}: state={e['state']}")
-        if "action" in e: lines.append(f"    -> action {e['action']} params={e.get('params',{})}")
+
+def _check_one(
+    spec: Spec,
+    bound: int = 10,
+    invariant_filter: str | None = None,
+    timeout_ms: int = 30000,
+) -> dict[str, Any]:
+    invs = [i for i in spec.invariants if not invariant_filter or i["name"] == invariant_filter]
+    if invariant_filter and not invs:
+        raise SpecError(f"invariant {invariant_filter!r} not found")
+    solver = z3.Solver()
+    solver.set("timeout", timeout_ms)
+
+    states: list[dict[str, Any]] = []
+    for t in range(bound + 1):
+        states.append({n: _slot(spec, v, t) for n, v in spec.vars.items()})
+
+    # value domains: enums are restricted to their values, other scalars are free
+    for t, st in enumerate(states):
+        for n, v in spec.vars.items():
+            if isinstance(v.type, EnumType):
+                solver.add(
+                    z3.Or(*[st[n]["const"] == z3.StringVal(val) for val in v.type.values])
+                )
+
+    _encode_init(solver, spec, states)
+
+    nact = len(spec.actions)
+    for t in range(bound):
+        choice = z3.Int(f"__action_{t}")
+        solver.add(choice >= -1, choice < nact)
+        cur, nxt = states[t], states[t + 1]
+        cur_bindings = {n: _binding(v, cur[n]) for n, v in spec.vars.items()}
+        for ai, a in enumerate(spec.actions):
+            penv: dict[str, Z3Binding] = {}
+            for pn, pv in a.params.items():
+                sort = z3_sort_for(pv.type)
+                pz = z3.Const(f"{a.name}_{pn}_{t}", sort)
+                if pv.kind == "int":
+                    if pv.min is not None:
+                        solver.add(pz >= pv.min)
+                    if pv.max is not None:
+                        solver.add(pz <= pv.max)
+                elif pv.kind == "enum":
+                    solver.add(z3.Or(*[pz == z3.StringVal(val) for val in pv.type.values]))
+                penv[pn] = Z3Binding(pz, pv.type)
+            env = {**cur_bindings, **penv}
+            tenv = spec.tenv(a)
+            req = (
+                z3.And(*[to_z3(r, env, tenv) for r in a.requires])
+                if a.requires
+                else z3.BoolVal(True)
+            )
+            eff: list = []
+            for vn, v in spec.vars.items():
+                if vn not in a.effects:
+                    eff.extend(_unchanged(v, cur[vn], nxt[vn]))
+                    continue
+                raw = a.effects[vn]
+                if isinstance(v.type, RecordType):
+                    for fname, ft in v.type.fields:
+                        if fname in raw:
+                            val = to_z3(raw[fname], env, tenv, expected=ft)
+                            eff.append(nxt[vn]["fields"][fname] == val)
+                        else:
+                            eff.append(nxt[vn]["fields"][fname] == cur[vn]["fields"][fname])
+                    continue
+                val = to_z3(raw, env, tenv, expected=v.type)
+                if v.type.kind == "map":
+                    assert isinstance(val, Z3Map)
+                    eff.append(nxt[vn]["values"] == val.values)
+                    eff.append(nxt[vn]["present"] == val.present)
+                    eff.append(nxt[vn]["size"] == val.size)
+                elif v.type.kind == "set":
+                    assert isinstance(val, Z3Set)
+                    eff.append(nxt[vn]["present"] == val.present)
+                    eff.append(nxt[vn]["size"] == val.size)
+                elif v.type.kind == "seq":
+                    assert isinstance(val, Z3Seq)
+                    eff.append(nxt[vn]["items"] == val.items)
+                    eff.append(nxt[vn]["size"] == val.size)
+                else:
+                    eff.append(nxt[vn]["const"] == val)
+            solver.add(z3.Implies(choice == ai, z3.And(req, *eff)))
+        # stutter: a step where no action is taken keeps the state unchanged
+        stutter: list = []
+        for vn, v in spec.vars.items():
+            stutter.extend(_unchanged(v, cur[vn], nxt[vn]))
+        solver.add(z3.Implies(choice == -1, z3.And(*stutter)))
+
+    # violations: invariants plus collection capacity bounds
+    viols: list = []
+    for t, st in enumerate(states):
+        bindings = {n: _binding(v, st[n]) for n, v in spec.vars.items()}
+        for inv in invs:
+            term = to_z3(inv["expr"], bindings, spec.types)
+            viols.append(z3.Not(term))
+        if invariant_filter:
+            # a focused run only looks at the requested invariant
+            continue
+        for n, v in spec.vars.items():
+            if isinstance(v.type, (MapType, SetType, SeqType)):
+                size = st[n]["size"]
+                viols.append(size > v.type.max_size)
+    if viols:
+        solver.add(z3.Or(*viols))
+    res = solver.check()
+    if res == z3.unsat:
+        return {
+            "status": "ok",
+            "bound": bound,
+            "message": f"no violation up to bound {bound}",
+            "guarantee": f"{GUARANTEE_BOUNDED.replace('(k)', f'({bound})')}",
+        }
+    if res != z3.sat:
+        reason = solver.reason_unknown() or str(res)
+        return {
+            "status": "unknown",
+            "bound": bound,
+            "reason": reason,
+            "message": f"solver returned {res} up to bound {bound} ({reason})",
+            "guarantee": "unknown",
+        }
+    model = solver.model()
+    trace = _decode_trace(spec, model, states, bound)
+    violations = _find_violations(spec, trace, invariant_filter=invariant_filter)
+    return {
+        "status": "violation",
+        "bound": bound,
+        "depth": len(trace) - 1,
+        "trace": trace,
+        "violated": [v["name"] for v in violations],
+        "violations": violations,
+        "message": (
+            f"COUNTEREXAMPLE found within bound {bound}: invariant(s) violated: "
+            + ", ".join(v["name"] for v in violations)
+        ),
+        "guarantee": "violation-found",
+    }
+
+
+def _decode_trace(spec: Spec, model, states, bound: int) -> list[dict[str, Any]]:
+    """Turn a Z3 model into a concrete counterexample trace."""
+    nact = len(spec.actions)
+    trace: list[dict[str, Any]] = []
+    for t in range(bound + 1):
+        state = _decode_state(spec, model, states[t])
+        entry: dict[str, Any] = {"step": t, "state": state}
+        if t < bound:
+            ch = model.eval(z3.Int(f"__action_{t}"), model_completion=True).as_long()
+            if 0 <= ch < nact:
+                a = spec.actions[ch]
+                params: dict[str, Any] = {}
+                for pn, pv in a.params.items():
+                    pz = z3.Const(f"{a.name}_{pn}_{t}", z3_sort_for(pv.type))
+                    params[pn] = _decode_scalar(pv.type, model.eval(pz, model_completion=True))
+                entry["action"] = a.name
+                entry["params"] = params
+            else:
+                entry["action"] = "(stutter)"
+                entry["params"] = {}
+        trace.append(entry)
+    return trace
+
+
+def _decode_state(spec: Spec, model, slots: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for name, var in spec.vars.items():
+        t = var.type
+        slot = slots[name]
+        if t.kind in ("int", "bool", "str", "enum"):
+            out[name] = _decode_scalar(t, model.eval(slot["const"], model_completion=True))
+        elif t.kind == "map":
+            out[name] = _decode_map(t, slot, model)
+        elif t.kind == "set":
+            out[name] = _decode_set(t, slot, model)
+        elif t.kind == "seq":
+            out[name] = _decode_seq(t, slot, model)
+        elif t.kind == "record":
+            out[name] = {
+                fname: _decode_scalar(ft, model.eval(slot["fields"][fname], model_completion=True))
+                for fname, ft in t.fields
+            }
+        else:  # pragma: no cover - unreachable
+            raise SpecError(f"var {name}: unsupported type {t.kind}")
+    return out
+
+
+def _decode_scalar(t, val):
+    if t.kind == "int":
+        return val.as_long()
+    if t.kind == "bool":
+        return z3.is_true(val)
+    return val.as_string()
+
+
+def _decode_map(t: MapType, slot, model) -> dict:
+    out: dict[Any, Any] = {}
+    for i, key in enumerate(t.domain):
+        present = model.eval(z3.Select(slot["present"], z3.IntVal(i)), model_completion=True)
+        if not z3.is_true(present):
+            continue
+        value = model.eval(z3.Select(slot["values"], z3.IntVal(i)), model_completion=True)
+        out[key] = _decode_scalar(t.value, value)
+    return out
+
+
+def _decode_set(t: SetType, slot, model) -> set:
+    out: set[Any] = set()
+    for i, item in enumerate(t.domain):
+        present = model.eval(z3.Select(slot["present"], z3.IntVal(i)), model_completion=True)
+        if z3.is_true(present):
+            out.add(item)
+    return out
+
+
+def _decode_seq(t: SeqType, slot, model) -> list:
+    size = model.eval(slot["size"], model_completion=True).as_long()
+    out = []
+    for i in range(min(size, t.max_size + 1)):
+        value = model.eval(z3.Select(slot["items"], z3.IntVal(i)), model_completion=True)
+        out.append(_decode_scalar(t.elem, value))
+    return out
+
+
+def _find_violations(
+    spec: Spec, trace: list[dict[str, Any]], invariant_filter: str | None = None
+) -> list[dict[str, Any]]:
+    """Which invariants (or capacity bounds) the trace breaks, and where."""
+    from .model import check_invariants
+
+    found: list[dict[str, Any]] = []
+    for entry in trace:
+        state = entry["state"]
+        for inv in check_invariants(spec, state):
+            if invariant_filter and inv["name"] != invariant_filter:
+                continue
+            found.append(
+                {
+                    "name": inv["name"],
+                    "kind": "invariant",
+                    "expr": inv["expr"],
+                    "step": entry["step"],
+                    "state": value_to_json(spec.types, state),
+                }
+            )
+        if invariant_filter:
+            continue
+        for name, var in spec.vars.items():
+            if isinstance(var.type, (MapType, SetType, SeqType)):
+                size = len(state[name])
+                if size > var.type.max_size:
+                    found.append(
+                        {
+                            "name": f"{name}_capacity",
+                            "kind": "bound",
+                            "expr": f"len({name}) <= {var.type.max_size}",
+                            "step": entry["step"],
+                            "state": value_to_json(spec.types, state),
+                        }
+                    )
+    if not found and trace:
+        found.append(
+            {
+                "name": "unknown",
+                "kind": "unknown",
+                "expr": "",
+                "step": trace[-1]["step"],
+                "state": value_to_json(spec.types, trace[-1]["state"]),
+            }
+        )
+    return found
+
+
+# --------------------------------------------------------------------------
+# reporting
+# --------------------------------------------------------------------------
+
+
+def format_result(spec: Spec, result: dict[str, Any]) -> str:
+    """Human readable rendering of a check result."""
+    if result["status"] == "ok":
+        return (
+            f"{result['message']}  (bounded claim only, not a proof for all depths; "
+            f"guarantee: {result.get('guarantee', GUARANTEE_BOUNDED)})"
+        )
+    if result["status"] != "violation":
+        return f"{result['message']}  (guarantee: {result.get('guarantee', 'unknown')})"
+    lines = [result["message"]]
+    for entry in result.get("trace", []):
+        lines.append(f"  step {entry['step']}: state={entry['state']}")
+        if "action" in entry:
+            lines.append(f"    -> action {entry['action']} params={entry.get('params', {})}")
+    for v in result.get("violations", []):
+        lines.append(f"  violated at step {v['step']}: {v['name']} ({v['kind']}) {v['expr']}")
+    lines.append(
+        "  This is a counterexample: reproduce it, fix the implementation, re-run. "
+        "Do not weaken the spec."
+    )
     return "\n".join(lines)

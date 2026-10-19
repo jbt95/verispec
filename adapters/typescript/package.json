@@ -1,0 +1,36 @@
+{
+  "name": "@verispec/adapter",
+  "version": "1.0.0",
+  "description": "VeriSpec trace recorder for TypeScript and JavaScript: record what your implementation did, so that `verispec check-trace` can decide whether it follows the contract.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/cjs/src/index.js",
+  "module": "./dist/esm/src/index.js",
+  "types": "./dist/esm/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/esm/src/index.d.ts",
+      "import": "./dist/esm/src/index.js",
+      "require": "./dist/cjs/src/index.js"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "npm run build:esm && npm run build:cjs && node scripts/finalize-cjs.mjs",
+    "build:esm": "tsc -p tsconfig.json",
+    "build:cjs": "tsc -p tsconfig.cjs.json",
+    "gen": "verispec gen-tests ../../examples/bank.yaml --lang typescript -o test/bank.verispec.test.ts && verispec gen-tests ../../examples/bank.yaml --lang javascript -o test/js/bank.verispec.test.js",
+    "pretest": "npm run gen",
+    "test": "npm run build && node --test dist/esm/test/ test/js/",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": ["verispec", "formal-methods", "trace", "conformance", "testing", "javascript"],
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "fast-check": "^3.20.0",
+    "typescript": "^5.5.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,27 @@
+spec_version: "1.0"
+name: Idempotency
+description: >
+  A request may be applied at most once.  The seen set records the request
+  ids that were already applied.  Use it for every endpoint that a client
+  may retry.
+vars:
+  seen:
+    type: set
+    of: str
+    elem_domain: [r1, r2, r3, r4]
+    max_size: 4
+  applied: {type: int, min: 0, max: 100}
+init:
+  seen: []
+  applied: "0"
+actions:
+  - name: apply
+    params:
+      request_id: {type: "enum[r1,r2,r3,r4]"}
+    requires: ["request_id not in seen"]
+    effects:
+      seen: "set_add(seen, request_id)"
+      applied: "applied + 1"
+invariants:
+  - {name: applied_matches_seen, expr: "len(seen) == applied"}
+  - {name: applied_bounded, expr: "applied <= 4"}

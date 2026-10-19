@@ -1,0 +1,75 @@
+name: Spec-format RFC
+description: "Propose a change to the VeriSpec spec format."
+title: "RFC: "
+labels:
+  - rfc
+body:
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: "Preflight"
+      options:
+        - label: "The document is also filed in `rfcs/` as `rfcs/NNNN-<slug>.md`"
+          required: true
+        - label: "The title follows the convention `RFC: <summary>`"
+          required: true
+        - label: "This changes the spec format, not only the implementation"
+          required: true
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: "Summary"
+      description: "One paragraph. What changes, in the language of the spec format."
+    validations:
+      required: true
+  - type: textarea
+    id: motivation
+    attributes:
+      label: "Motivation"
+      description: "Why is this needed? What cannot be expressed or verified today, and what does that cost?"
+    validations:
+      required: true
+  - type: textarea
+    id: design
+    attributes:
+      label: "Detailed design"
+      description: "The concrete shape of the change: syntax, semantics, evaluation rules, error behaviour, worked examples."
+    validations:
+      required: true
+  - type: textarea
+    id: encoding
+    attributes:
+      label: "Encoding and semantics impact"
+      description: "How does the change affect the Z3 encoding, the TLA+ export, the generated property tests, and the trace checker? Include the effect on the expression AST in `src/verispec/expr.py`."
+    validations:
+      required: true
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: "Compatibility and migration impact"
+      description: "Is this MAJOR or MINOR under the versioning policy? What happens to existing specs? Does `verispec migrate` need to handle it? Which corpus entries must be added or changed?"
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: "Alternatives rejected"
+      description: "Which other designs were considered, and why they were not chosen."
+    validations:
+      required: true
+  - type: textarea
+    id: questions
+    attributes:
+      label: "Unresolved questions"
+      description: "Open questions for the maintainers and the community. Be specific: the comment period is where they get answered."
+    validations:
+      required: false
+  - type: textarea
+    id: extra
+    attributes:
+      label: "Additional context"
+      description: "Prior art, related issues, links to the corpus entries you plan to add."
+    validations:
+      required: false

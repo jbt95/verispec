@@ -1,0 +1,35 @@
+# CODEOWNERS
+#
+# CODEOWNERS is how per-language adapter maintainers get review rights on the
+# directories they own. A team listed here is asked for review on every pull
+# request touching its paths, and its members are the maintainers of that
+# adapter (see GOVERNANCE.md).
+#
+# Teams that do not exist yet are placeholders: they are activated when the
+# corresponding adapter lands in adapters/<language>/. Until then, the paths
+# fall back to the default owner below.
+#
+# The spec format itself is owned by the initial maintainer and changed only
+# through the RFC process (rfcs/).
+
+# Default owner for everything.
+* @jbt95
+
+# Core implementation.
+src/verispec/ @jbt95
+
+# Conformance corpus: the source of truth for what the spec format supports.
+corpus/ @jbt95
+
+# Spec format RFCs.
+rfcs/ @jbt95
+
+# Documentation.
+docs/ @jbt95
+
+# Per-language adapter maintainers.
+adapters/typescript/ @verispec-ts-maintainers
+adapters/go/ @verispec-go-maintainers
+adapters/rust/ @verispec-rust-maintainers
+adapters/c/ @verispec-c-maintainers
+adapters/java/ @verispec-java-maintainers

@@ -1,0 +1,22 @@
+spec_version: "1.0"
+name: Bank
+description: >
+  Two accounts A and B.  A transfer moves an amount from A to B, and the total
+  is conserved.  This is the shared conformance spec: every adapter, in every
+  language, is checked against it.
+vars:
+  balance_a: {type: int, min: 0, max: 100}
+  balance_b: {type: int, min: 0, max: 100}
+init:
+  balance_a: "50"
+  balance_b: "50"
+actions:
+  - name: transfer_a_to_b
+    params:
+      amount: {type: int, min: 1, max: 50}
+    requires: ["amount > 0", "balance_a >= amount"]
+    effects:
+      balance_a: "balance_a - amount"
+      balance_b: "balance_b + amount"
+invariants:
+  - {name: total_conserved, expr: "balance_a + balance_b == 100"}

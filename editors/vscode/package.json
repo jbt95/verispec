@@ -1,0 +1,182 @@
+{
+  "name": "verispec",
+  "displayName": "VeriSpec",
+  "description": "Verify VeriSpec formal specifications with bounded model checking, validate implementation traces, and read counterexamples directly in the editor.",
+  "version": "0.1.0",
+  "publisher": "verispec",
+  "license": "Apache-2.0",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Testing",
+    "Linters"
+  ],
+  "keywords": [
+    "verispec",
+    "formal methods",
+    "model checking",
+    "bmc",
+    "z3",
+    "specification",
+    "counterexample",
+    "property testing"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/verispec/verispec"
+  },
+  "bugs": {
+    "url": "https://github.com/verispec/verispec/issues"
+  },
+  "homepage": "https://github.com/verispec/verispec",
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onLanguage:verispec",
+    "onCommand:verispec.validateSpec",
+    "onCommand:verispec.checkSpec",
+    "onCommand:verispec.checkTrace",
+    "onCommand:verispec.generateBrief",
+    "onCommand:verispec.showReport"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "verispec",
+        "aliases": [
+          "VeriSpec"
+        ],
+        "extensions": [
+          ".verispec.yaml",
+          ".verispec.yml"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "verispec",
+        "scopeName": "source.verispec",
+        "path": "./syntaxes/verispec.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "VeriSpec",
+      "properties": {
+        "verispec.cliPath": {
+          "type": "string",
+          "default": "verispec",
+          "description": "Path to the verispec executable. Use an absolute path if the CLI is not on your PATH."
+        },
+        "verispec.bound": {
+          "type": "number",
+          "default": 10,
+          "minimum": 1,
+          "maximum": 1000,
+          "description": "Bounded model checking depth (K). Higher bounds find deeper counterexamples but take longer."
+        },
+        "verispec.traceFile": {
+          "type": "string",
+          "default": "",
+          "description": "Path to a JSON trace file to check against the spec. When empty, the active JSON file is used."
+        },
+        "verispec.showInlineDiagnostics": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run a bounded check when a VeriSpec spec is opened or saved and publish results as inline diagnostics."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "verispec.validateSpec",
+        "title": "Validate spec",
+        "category": "VeriSpec"
+      },
+      {
+        "command": "verispec.checkSpec",
+        "title": "Check spec (bounded model checking)",
+        "category": "VeriSpec"
+      },
+      {
+        "command": "verispec.checkTrace",
+        "title": "Check trace against spec",
+        "category": "VeriSpec"
+      },
+      {
+        "command": "verispec.generateBrief",
+        "title": "Generate agent brief",
+        "category": "VeriSpec"
+      },
+      {
+        "command": "verispec.showReport",
+        "title": "Show report",
+        "category": "VeriSpec"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "verispec.checkSpec",
+        "key": "ctrl+alt+v",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "verispec.checkSpec",
+        "key": "ctrl+alt+b ctrl+alt+shift+v",
+        "when": "editorTextFocus"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "verispec.validateSpec",
+          "when": "true"
+        },
+        {
+          "command": "verispec.checkSpec",
+          "when": "true"
+        },
+        {
+          "command": "verispec.checkTrace",
+          "when": "true"
+        },
+        {
+          "command": "verispec.generateBrief",
+          "when": "true"
+        },
+        {
+          "command": "verispec.showReport",
+          "when": "true"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "verispec.checkSpec",
+          "when": "resourceLangId == verispec",
+          "group": "verification@1"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "verispec.checkSpec",
+          "when": "resourceExtname == .yaml || resourceExtname == .yml",
+          "group": "verification@1"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts",
+    "test": "echo \"no tests\" && exit 0",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^2.24.0",
+    "typescript": "^5.5.0"
+  }
+}

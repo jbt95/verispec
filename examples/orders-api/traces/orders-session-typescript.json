@@ -1,0 +1,271 @@
+[
+  {
+    "action": "init",
+    "params": {},
+    "state": {
+      "stock": {
+        "0": 5,
+        "1": 3
+      },
+      "reserved": {
+        "0": 0,
+        "1": 0
+      },
+      "order_product": {},
+      "order_quantity": {},
+      "order_state": {},
+      "order_amount": {},
+      "paid_keys": [],
+      "revenue": 0,
+      "orders_created": 0
+    }
+  },
+  {
+    "action": "place_order",
+    "params": {
+      "order_id": 0,
+      "product": 0,
+      "quantity": 3
+    },
+    "state": {
+      "stock": {
+        "0": 5,
+        "1": 3
+      },
+      "reserved": {
+        "0": 0,
+        "1": 0
+      },
+      "order_product": {
+        "0": 0
+      },
+      "order_quantity": {
+        "0": 3
+      },
+      "order_state": {
+        "0": "pending"
+      },
+      "order_amount": {
+        "0": 30
+      },
+      "paid_keys": [],
+      "revenue": 0,
+      "orders_created": 1
+    }
+  },
+  {
+    "action": "reserve",
+    "params": {
+      "order_id": 0,
+      "product": 0
+    },
+    "state": {
+      "stock": {
+        "0": 5,
+        "1": 3
+      },
+      "reserved": {
+        "0": 3,
+        "1": 0
+      },
+      "order_product": {
+        "0": 0
+      },
+      "order_quantity": {
+        "0": 3
+      },
+      "order_state": {
+        "0": "reserved"
+      },
+      "order_amount": {
+        "0": 30
+      },
+      "paid_keys": [],
+      "revenue": 0,
+      "orders_created": 1
+    }
+  },
+  {
+    "action": "pay",
+    "params": {
+      "order_id": 0,
+      "key": "k1"
+    },
+    "state": {
+      "stock": {
+        "0": 5,
+        "1": 3
+      },
+      "reserved": {
+        "0": 3,
+        "1": 0
+      },
+      "order_product": {
+        "0": 0
+      },
+      "order_quantity": {
+        "0": 3
+      },
+      "order_state": {
+        "0": "paid"
+      },
+      "order_amount": {
+        "0": 30
+      },
+      "paid_keys": [
+        "k1"
+      ],
+      "revenue": 30,
+      "orders_created": 1
+    }
+  },
+  {
+    "action": "ship",
+    "params": {
+      "order_id": 0
+    },
+    "state": {
+      "stock": {
+        "0": 2,
+        "1": 3
+      },
+      "reserved": {
+        "0": 0,
+        "1": 0
+      },
+      "order_product": {
+        "0": 0
+      },
+      "order_quantity": {
+        "0": 3
+      },
+      "order_state": {
+        "0": "shipped"
+      },
+      "order_amount": {
+        "0": 30
+      },
+      "paid_keys": [
+        "k1"
+      ],
+      "revenue": 30,
+      "orders_created": 1
+    }
+  },
+  {
+    "action": "place_order",
+    "params": {
+      "order_id": 1,
+      "product": 1,
+      "quantity": 1
+    },
+    "state": {
+      "stock": {
+        "0": 2,
+        "1": 3
+      },
+      "reserved": {
+        "0": 0,
+        "1": 0
+      },
+      "order_product": {
+        "0": 0,
+        "1": 1
+      },
+      "order_quantity": {
+        "0": 3,
+        "1": 1
+      },
+      "order_state": {
+        "0": "shipped",
+        "1": "pending"
+      },
+      "order_amount": {
+        "0": 30,
+        "1": 10
+      },
+      "paid_keys": [
+        "k1"
+      ],
+      "revenue": 30,
+      "orders_created": 2
+    }
+  },
+  {
+    "action": "reserve",
+    "params": {
+      "order_id": 1,
+      "product": 1
+    },
+    "state": {
+      "stock": {
+        "0": 2,
+        "1": 3
+      },
+      "reserved": {
+        "0": 0,
+        "1": 1
+      },
+      "order_product": {
+        "0": 0,
+        "1": 1
+      },
+      "order_quantity": {
+        "0": 3,
+        "1": 1
+      },
+      "order_state": {
+        "0": "shipped",
+        "1": "reserved"
+      },
+      "order_amount": {
+        "0": 30,
+        "1": 10
+      },
+      "paid_keys": [
+        "k1"
+      ],
+      "revenue": 30,
+      "orders_created": 2
+    }
+  },
+  {
+    "action": "pay",
+    "params": {
+      "order_id": 1,
+      "key": "k2"
+    },
+    "state": {
+      "stock": {
+        "0": 2,
+        "1": 3
+      },
+      "reserved": {
+        "0": 0,
+        "1": 1
+      },
+      "order_product": {
+        "0": 0,
+        "1": 1
+      },
+      "order_quantity": {
+        "0": 3,
+        "1": 1
+      },
+      "order_state": {
+        "0": "shipped",
+        "1": "paid"
+      },
+      "order_amount": {
+        "0": 30,
+        "1": 10
+      },
+      "paid_keys": [
+        "k1",
+        "k2"
+      ],
+      "revenue": 40,
+      "orders_created": 2
+    }
+  }
+]

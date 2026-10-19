@@ -1,0 +1,8 @@
+{
+  "check": {
+    "status": "violation",
+    "violated": [
+      "non_negative"
+    ]
+  }
+}

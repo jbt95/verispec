@@ -1,0 +1,14 @@
+VeriSpec
+Copyright 2026 Jordi Bermejo Tornero
+
+This product includes software developed by the VeriSpec project.
+
+This product bundles third-party open-source dependencies, each distributed
+under its own license and copyright:
+
+  - z3-solver (Z3 theorem prover, MIT License, Copyright (c) Microsoft Corporation)
+  - PyYAML (MIT License, Copyright (c) Kirill Simonov and contributors)
+
+Those licenses apply to those components only. VeriSpec itself is licensed
+under the Apache License, Version 2.0. See the LICENSE file for the full
+license text.

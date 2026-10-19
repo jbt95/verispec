@@ -1,0 +1,96 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "VeriSpec",
+  "scopeName": "source.verispec",
+  "fileTypes": [
+    "verispec.yaml",
+    "verispec.yml"
+  ],
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#specName" },
+    { "include": "#actionName" },
+    { "include": "#invariantName" },
+    { "include": "#varName" },
+    { "include": "#keywords" },
+    { "include": "#types" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#booleans" }
+  ],
+  "repository": {
+    "comments": {
+      "name": "comment.line.number-sign.verispec",
+      "match": "#.*$"
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.verispec",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.verispec",
+              "match": "\\\\."
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.single.verispec",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            {
+              "name": "constant.character.escape.verispec",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
+    },
+    "numbers": {
+      "name": "constant.numeric.verispec",
+      "match": "(?<![\\w.])-?\\d+(?:\\.\\d+)?(?![\\w.])"
+    },
+    "booleans": {
+      "name": "constant.language.boolean.verispec",
+      "match": "\\b(?:true|false)\\b"
+    },
+    "keywords": {
+      "name": "keyword.control.verispec",
+      "match": "\\b(?:name|description|spec_version|imports|vars|init|actions|params|requires|effects|invariants|expr|type|min|max|max_size|key|value|of|fields)\\b"
+    },
+    "types": {
+      "name": "support.type.verispec",
+      "match": "\\b(?:int|bool|str|enum|map|set|seq|record)\\b"
+    },
+    "specName": {
+      "match": "^(name)(:\\s*)([A-Za-z_][A-Za-z0-9_]*)",
+      "captures": {
+        "1": { "name": "keyword.control.verispec" },
+        "3": { "name": "entity.name.type.verispec" }
+      }
+    },
+    "actionName": {
+      "match": "^(\\s*)(-\\s+)(name)(:\\s*)([A-Za-z_][A-Za-z0-9_]*)",
+      "captures": {
+        "3": { "name": "keyword.control.verispec" },
+        "5": { "name": "entity.name.function.verispec" }
+      }
+    },
+    "invariantName": {
+      "match": "(\\{\\s*)(name)(\\s*:\\s*)([A-Za-z_][A-Za-z0-9_]*)",
+      "captures": {
+        "2": { "name": "keyword.control.verispec" },
+        "4": { "name": "entity.name.constant.verispec" }
+      }
+    },
+    "varName": {
+      "match": "^(\\s*)([A-Za-z_][A-Za-z0-9_]*)(:\\s*\\{)",
+      "captures": {
+        "2": { "name": "variable.other.verispec" }
+      }
+    }
+  }
+}

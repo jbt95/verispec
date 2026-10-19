@@ -1,20 +1,112 @@
 [build-system]
-requires=["hatchling"]
-build-backend="hatchling.build"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
-name="verispec"
-version="0.1.0"
-description="Spec-driven development with formal teeth: one formal spec -> Z3 BMC, TLA+ export, generated property tests and trace conformance for any language."
-readme="README.md"
-requires-python=">=3.11"
-license={text="MIT"}
-dependencies=["z3-solver>=4.12","PyYAML>=6.0"]
+name = "verispec"
+version = "1.0.0"
+description = "Spec-driven development with formal teeth: one formal spec -> Z3 BMC, TLA+/Lean exports, generated property tests, trace conformance for any language, and an agent brief."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Jordi Bermejo Tornero" }]
+keywords = [
+    "formal-methods",
+    "model-checking",
+    "z3",
+    "tla+",
+    "spec-driven-development",
+    "property-based-testing",
+    "formal-specs",
+    "mcp",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Testing",
+]
+dependencies = ["z3-solver>=4.12", "PyYAML>=6.0"]
+
 [project.optional-dependencies]
-dev=["pytest>=8","hypothesis>=6"]
-test=["pytest>=8","hypothesis>=6"]
+dev = ["pytest>=8", "hypothesis>=6", "ruff>=0.6", "mypy>=1.11"]
+test = ["pytest>=8", "hypothesis>=6"]
+# The REST API example (examples/orders-api) needs a web framework and a
+# test client.  It is an example, not a dependency of the library.
+api = ["fastapi>=0.115", "uvicorn>=0.30", "httpx>=0.27"]
+
+[project.urls]
+Homepage = "https://github.com/verispec/verispec"
+Documentation = "https://github.com/verispec/verispec/tree/main/docs"
+Issues = "https://github.com/verispec/verispec/issues"
+Changelog = "https://github.com/verispec/verispec/blob/main/CHANGELOG.md"
+
 [project.scripts]
-verispec="verispec.cli:main"
+verispec = "verispec.cli:main"
+
 [tool.hatch.build.targets.wheel]
-packages=["src/verispec"]
+packages = ["src/verispec"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/verispec", "docs", "examples", "corpus", "README.md", "LICENSE"]
+
 [tool.pytest.ini_options]
-testpaths=["tests"]
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM"]
+ignore = [
+    "E501",   # long lines are checked by the formatter, not the linter
+    "B008",   # argparse defaults are fine
+    "SIM108", # ternaries are not always clearer
+    "B905",   # zip(strict=) is not worth the churn here
+    "B007",   # loop variables that are only there for readability
+    "B017",   # blind pytest.raises(Exception) is fine in tests
+    "SIM102", # nested ifs are sometimes clearer
+    "SIM103",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E402"]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["src/verispec"]
+ignore_missing_imports = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+check_untyped_defs = false
+no_implicit_optional = true
+warn_redundant_casts = true
+# The spec type system is a union of frozen dataclasses, so the type checker
+# cannot narrow a `TypeSpec` to the member that carries a field. These codes
+# are the noise that produces; the real errors are still reported.
+disable_error_code = [
+    "union-attr",
+    "arg-type",
+    "assignment",
+    "index",
+    "operator",
+    "return-value",
+    "call-overload",
+    "misc",
+    "no-any-return",
+    "list-item",
+    "dict-item",
+    "type-var",
+    "var-annotated",
+    "attr-defined",
+    "truthy-bool",
+    "possibly-undefined",
+    "redundant-expr",
+]

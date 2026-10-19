@@ -1,0 +1,36 @@
+spec_version: "1.0"
+name: Collections
+description: >
+  Exercises every v1 collection type at once: a map with integer keys, a map
+  with string keys, a set, a sequence and a record.
+vars:
+  balances: {type: map, key: int, key_min: 0, key_max: 3, value: int, value_min: 0, value_max: 1000, max_size: 4}
+  by_name: {type: map, key: str, key_domain: [alice, bob], value: int, value_min: 0, value_max: 100, max_size: 2}
+  seen: {type: set, of: str, elem_domain: [a, b, c], max_size: 3}
+  history: {type: seq, of: int, elem_min: 0, elem_max: 10, max_size: 4}
+  customer: {type: record, fields: {name: str, tier: "enum[gold,silver]", active: bool}}
+init:
+  balances: {0: 10, 1: 20}
+  by_name: {alice: 5}
+  seen: [a]
+  history: [1, 2]
+  customer: {name: alice, tier: gold, active: true}
+actions:
+  - name: deposit
+    params:
+      account: {type: int, min: 0, max: 3}
+      amount: {type: int, min: 1, max: 50}
+      tag: {type: "enum[a,b,c]"}
+    requires: ["amount > 0"]
+    effects:
+      balances: "map_set(balances, account, map_get(balances, account) + amount)"
+      by_name: "map_set(by_name, \"bob\", map_get(by_name, \"bob\") + amount)"
+      seen: "set_add(seen, tag)"
+      history: "seq_append(history, amount)"
+      customer:
+        active: "false"
+invariants:
+  - {name: balances_bounded, expr: "len(balances) <= 4"}
+  - {name: seen_bounded, expr: "len(seen) <= 3"}
+  - {name: history_bounded, expr: "len(history) <= 4"}
+  - {name: customer_known, expr: "customer[\"tier\"] == \"gold\" or customer[\"tier\"] == \"silver\""}

@@ -1,0 +1,9 @@
+{
+  "check": {
+    "status": "ok",
+    "violated": []
+  },
+  "trace": {
+    "ok": false
+  }
+}

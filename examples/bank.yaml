@@ -1,5 +1,9 @@
+spec_version: "1.0"
 name: Bank
-description: Two accounts A and B; transfers conserve total and never go negative.
+description: >
+  Two accounts A and B.  Transfers conserve the total and no account may go
+  negative.  The canonical demo spec: the buggy variant shows what VeriSpec
+  catches in two steps.
 vars:
   balance_a: {type: int, min: 0, max: 100}
   balance_b: {type: int, min: 0, max: 100}
