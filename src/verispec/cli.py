@@ -561,6 +561,81 @@ def cmd_gen_harness(args) -> int:
     return EXIT_OK
 
 
+def cmd_verify_loop(args) -> int:
+    from .trace import load_trace
+    from .verify_loop import format_verify_loop, run_verify_loop
+
+    spec = _load_spec_or_die(args.spec)
+    trace = None
+    if args.trace:
+        trace = load_trace(args.trace)
+    report = run_verify_loop(
+        spec,
+        trace=trace,
+        max_rounds=args.rounds,
+        fuzz_bound=args.fuzz_bound,
+        fuzz_trials=args.fuzz_trials,
+        z3_bound=args.z3_bound,
+        timeout_ms=args.timeout,
+        seed=args.seed,
+    )
+    payload = {
+        "tool": "verispec",
+        "version": __version__,
+        "command": "verify-loop",
+        "spec": _spec_payload(spec),
+        **report.to_dict(),
+    }
+    if args.format == "json":
+        _print_json(payload)
+    else:
+        print(format_verify_loop(report))
+    if report.verdict == "failure":
+        return EXIT_VIOLATION
+    if report.verdict == "uncertain":
+        return EXIT_VIOLATION
+    return EXIT_OK
+
+
+def cmd_spec_strength(args) -> int:
+    from .spec_strength import run_spec_strength
+    from .trace import load_trace
+
+    spec = _load_spec_or_die(args.spec)
+    trace = load_trace(args.trace) if args.trace else None
+    report = run_spec_strength(
+        spec,
+        trace=trace,
+        walk_length=args.walk_length,
+        seed=args.seed,
+        max_mutants=args.max_mutants,
+    )
+    payload = {
+        "tool": "verispec",
+        "version": __version__,
+        "command": "spec-strength",
+        "spec": _spec_payload(spec),
+        **report.to_dict(),
+    }
+    if args.format == "json":
+        _print_json(payload)
+    else:
+        print(
+            f"base trace: {report.base_steps} action step(s); "
+            f"{report.caught} mutant(s) caught, {report.survived} survived"
+        )
+        if report.survived:
+            print("warning: surviving mutants suggest the spec may be too weak")
+        for m in report.mutants:
+            if not m.caught:
+                print(f"  SURVIVED  {m.mutant_id}: {m.description}")
+            elif args.verbose:
+                print(f"  caught    {m.mutant_id} ({m.failure_kind}): {m.description}")
+    if report.survived > 0:
+        return EXIT_VIOLATION
+    return EXIT_OK
+
+
 # --------------------------------------------------------------------------
 # parser
 # --------------------------------------------------------------------------
@@ -738,6 +813,34 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--target", required=True, choices=["kani", "esbmc"])
     sp.add_argument("-o", "--output")
     sp.set_defaults(func=cmd_gen_harness)
+
+    sp = sub.add_parser(
+        "verify-loop",
+        help="escalating verification with tri-state checks (trace/fuzz, then Z3)",
+    )
+    sp.add_argument("spec")
+    sp.add_argument("--trace", help="optional JSON trace for cheap trace-monitor evidence")
+    sp.add_argument("--rounds", type=int, default=2, help="escalation rounds (default 2)")
+    sp.add_argument("--fuzz-bound", type=int, default=6, help="max steps per fuzz trial")
+    sp.add_argument("--fuzz-trials", type=int, default=40, help="fuzz trials per invariant")
+    sp.add_argument("--z3-bound", type=int, default=12, help="Z3 depth for unresolved checks")
+    sp.add_argument("--timeout", type=int, default=30000, help="Z3 timeout in ms")
+    sp.add_argument("--seed", type=int, default=0, help="RNG seed for fuzz walks")
+    _add_format(sp)
+    sp.set_defaults(func=cmd_verify_loop)
+
+    sp = sub.add_parser(
+        "spec-strength",
+        help="spec vacuity check via trace perturbations (mutation-style)",
+    )
+    sp.add_argument("spec")
+    sp.add_argument("--trace", help="known-good trace (default: random model walk)")
+    sp.add_argument("--walk-length", type=int, default=4, help="steps when synthesising a base trace")
+    sp.add_argument("--seed", type=int, default=0)
+    sp.add_argument("--max-mutants", type=int, help="limit number of mutants (for large traces)")
+    sp.add_argument("-v", "--verbose", action="store_true", help="list caught mutants too")
+    _add_format(sp)
+    sp.set_defaults(func=cmd_spec_strength)
 
     return p
 
