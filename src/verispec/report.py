@@ -16,6 +16,10 @@ from .sign import spec_digest
 __all__ = ["render_report", "render_counterexample", "report_json", "GUARANTEE_LEGEND"]
 
 GUARANTEE_LEGEND = {
+    "proved": (
+        "Invariants were proved for all execution depths (unbounded), "
+        "typically via k-induction."
+    ),
     "bounded-proved(k)": (
         "No invariant was violated in any execution up to the bound. "
         "This is a bounded claim, not a proof for all depths."

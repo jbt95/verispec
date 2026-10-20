@@ -5,6 +5,20 @@ All notable changes to VeriSpec are documented here. The project follows
 format has its own version, carried by the `spec_version` field (see
 [`GOVERNANCE.md`](GOVERNANCE.md)).
 
+## [Unreleased]
+
+### CLI
+
+- **Added** `verispec prove` and `verispec check --unbounded` for unbounded
+  invariant proofs via k-induction, with guarantee label `proved`.
+- **Added** counterexample-to-induction reporting when the inductive step does
+  not close (`unknown`).
+
+### MCP
+
+- **Added** `unbounded`, `induction_k`, and `proof_method` options on the
+  `verify` tool.
+
 ## [1.0.0] - 2026-10-19
 
 The first open source release of the library and the CLI. The v0.1 proof of
