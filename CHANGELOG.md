@@ -33,6 +33,10 @@ format has its own version, carried by the `spec_version` field (see
   with `--skip-liveness` and `--temporal <name>`.
 - **Added** pending temporal obligations at trace end in `verispec check-trace`.
 - **Extended** `export-tla` with temporal formulas and fairness conjuncts.
+- **Added** `verispec prove` and `verispec check --unbounded` for unbounded
+  **safety** invariant proofs via k-induction, with guarantee label `proved`.
+- **Added** counterexample-to-induction reporting when the inductive step does
+  not close (`unknown`).
 - **Added** `verispec check-concurrent` to explore actor interleavings up to a
   step bound with partial-order reduction.
 - **Added** `verispec coverage`: report exercised actions, guards, invariants,
@@ -60,6 +64,11 @@ format has its own version, carried by the `spec_version` field (see
 - **Added** CI templates for GitLab, Jenkins, and Azure Pipelines under `ci/`.
 - **Extended** `verispec report` with compliance audit HTML/JSON and optional
   PDF (`pdf` extra), including bounded liveness and trace coverage when run.
+
+### MCP
+
+- **Added** `unbounded`, `induction_k`, and `proof_method` options on the
+  `verify` tool.
 
 ### Release / supply chain
 

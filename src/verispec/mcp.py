@@ -54,6 +54,20 @@ TOOLS = [
                     "type": "string",
                     "description": "Optional invariant name to focus the search on",
                 },
+                "unbounded": {
+                    "type": "boolean",
+                    "description": "If true, run k-induction for an unbounded proved guarantee",
+                },
+                "induction_k": {
+                    "type": "integer",
+                    "description": "k for k-induction when unbounded is true (default 1)",
+                    "minimum": 1,
+                },
+                "proof_method": {
+                    "type": "string",
+                    "enum": ["induction", "spacer"],
+                    "description": "Proof engine when unbounded is true (default induction)",
+                },
             },
             "required": ["spec_path"],
         },
@@ -167,23 +181,38 @@ def _call_tool(params: dict[str, Any]) -> dict[str, Any]:
 
 
 def _tool_verify(args: dict[str, Any]) -> tuple[str, bool]:
-    spec, bound, invariant, trace_path = _verify_arguments(args)
-    from .bmc import check
+    spec, bound, invariant, trace_path, unbounded, induction_k, proof_method = _verify_arguments(
+        args
+    )
+    if unbounded:
+        from .prove import prove
 
-    result = check(spec, bound=bound, invariant_filter=invariant)
-    if result.get("status") == "ok" and spec.temporal:
-        from .temporal import check_temporal_bounded, merge_check_with_liveness
-
-        result = merge_check_with_liveness(
-            result, check_temporal_bounded(spec, bound=bound, timeout_ms=30000)
+        result = prove(
+            spec,
+            k=induction_k,
+            invariant_filter=invariant,
+            method=proof_method,
+            precheck_bound=bound,
         )
+    else:
+        from .bmc import check
+
+        result = check(spec, bound=bound, invariant_filter=invariant)
+        if result.get("status") == "ok" and spec.temporal:
+            from .temporal import check_temporal_bounded, merge_check_with_liveness
+
+            result = merge_check_with_liveness(
+                result, check_temporal_bounded(spec, bound=bound, timeout_ms=30000)
+            )
     payload = _verification_payload(spec, result)
     if trace_path is not None:
         _attach_trace_check(spec, trace_path, payload)
     return json.dumps(payload, indent=2), payload["status"] != "ok"
 
 
-def _verify_arguments(args: dict[str, Any]) -> tuple[Spec, int, str | None, str | None]:
+def _verify_arguments(
+    args: dict[str, Any],
+) -> tuple[Spec, int, str | None, str | None, bool, int, str]:
     spec = _load_tool_spec(args)
     bound = args.get("bound", 10)
     if isinstance(bound, bool) or not isinstance(bound, int) or bound < 0:
@@ -194,7 +223,14 @@ def _verify_arguments(args: dict[str, Any]) -> tuple[Spec, int, str | None, str 
     trace_path = args.get("trace_path")
     if trace_path is not None and (not isinstance(trace_path, str) or not trace_path):
         raise SpecError("trace_path must be a non-empty string")
-    return spec, bound, invariant, trace_path
+    unbounded = bool(args.get("unbounded"))
+    induction_k = args.get("induction_k", 1)
+    if isinstance(induction_k, bool) or not isinstance(induction_k, int) or induction_k < 1:
+        raise SpecError("induction_k must be a positive integer")
+    proof_method = args.get("proof_method", "induction")
+    if proof_method not in ("induction", "spacer"):
+        raise SpecError("proof_method must be 'induction' or 'spacer'")
+    return spec, bound, invariant, trace_path, unbounded, induction_k, proof_method
 
 
 def _verification_payload(spec: Spec, result: dict[str, Any]) -> dict[str, Any]:
@@ -215,6 +251,24 @@ def _verification_payload(spec: Spec, result: dict[str, Any]) -> dict[str, Any]:
                 "and re-run. Never weaken the spec or the invariant to make it pass."
             ),
         )
+    if result.get("induction_cex"):
+        payload["induction_cex"] = result["induction_cex"]
+        payload["guidance"] = (
+            "Counterexample to induction: the listed states satisfy the invariants but the "
+            "successor breaks one. Strengthen invariants or increase induction_k."
+        )
+    if result.get("liveness"):
+        payload["liveness"] = result["liveness"]
+    for key in (
+        "induction_k",
+        "proof_method",
+        "reason",
+        "safety_only",
+        "temporal_scope",
+        "temporal_note",
+    ):
+        if key in result:
+            payload[key] = result[key]
     return payload
 
 
