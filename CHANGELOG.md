@@ -5,6 +5,15 @@ All notable changes to VeriSpec are documented here. The project follows
 format has its own version, carried by the `spec_version` field (see
 [`GOVERNANCE.md`](GOVERNANCE.md)).
 
+## [Unreleased]
+
+### Runtime conformance
+
+- **Added** `verispec observe-runtime`: map OTLP JSON exports, NDJSON structured
+  logs, or a local OTLP/HTTP JSON receiver into VeriSpec trace steps via a
+  declarative mapping file, with optional streaming JSON lines and violation
+  webhooks.  See `docs/runtime-observe.md` and `examples/runtime-observe/`.
+
 ## [1.0.0] - 2026-10-19
 
 The first open source release of the library and the CLI. The v0.1 proof of
