@@ -19,6 +19,9 @@ format has its own version, carried by the `spec_version` field (see
 - **Added** optional `fairness` (weak/strong action lists) and `temporal`
   properties (`eventually`, `leads_to`) per [RFC-0002](rfcs/0002-temporal-liveness.md).
   Existing specs without these fields are unchanged.
+- **Added** optional `concurrency.actors` with per-actor action programs
+  ([RFC-0003](rfcs/0003-concurrency-actors.md)).
+- **Added** optional `actor` field on JSON trace steps when a spec declares actors.
 
 ### CLI
 
@@ -26,6 +29,8 @@ format has its own version, carried by the `spec_version` field (see
   with `--skip-liveness` and `--temporal <name>`.
 - **Added** pending temporal obligations at trace end in `verispec check-trace`.
 - **Extended** `export-tla` with temporal formulas and fairness conjuncts.
+- **Added** `verispec check-concurrent` to explore actor interleavings up to a
+  step bound with partial-order reduction.
 - **Added** `verispec coverage`: report exercised actions, guards, invariants,
   and parameter boundaries from traces and optional coverage-events JSON, with
   `--fail-under` for CI and SARIF output.

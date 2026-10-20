@@ -65,6 +65,7 @@ to HTML when `--format` is omitted.
 | `conformance-tested` | Recorded trace replayed and every step conformed |
 | `pending-obligation` | Trace conforms but a temporal property is not yet satisfied at trace end |
 | `violation-found` | Concrete counterexample |
+| `concurrent-explored(k)` | No violation in explored interleavings up to *k* steps (not all schedules) |
 | `unknown` | Solver or checker could not decide |
 
 ## Commands
@@ -147,6 +148,21 @@ Trace JSON: list of `{"action", "params", "state"}` steps; first step is `init`.
 verispec check-trace examples/bank.yaml examples/traces/bank-valid.json
 verispec check-trace examples/bank.yaml examples/traces/bank-invalid.json --format json
 ```
+
+Concurrent specs may require an `actor` field on each step after the initial snapshot.
+
+### `check-concurrent` — explore actor interleavings
+
+When a spec declares `concurrency.actors` with per-actor `program` steps:
+
+```bash
+verispec check-concurrent examples/bank-concurrent-race.yaml --bound 6
+verispec check-concurrent examples/bank-concurrent-race.yaml --bound 10 --format json
+verispec check-concurrent examples/bank-concurrent-race.yaml --invariant non_negative
+```
+
+Uses partial-order reduction on disjoint state-variable footprints. Counterexamples
+label each step with `actor`.
 
 ### `gen-tests` — property tests for an adapter
 

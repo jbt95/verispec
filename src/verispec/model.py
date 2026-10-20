@@ -218,6 +218,7 @@ class Spec:
                 for i, val in enumerate(v.values):
                     self.enum_map.setdefault(val, i)
         self.modules: list[dict[str, Any]] = []
+        self.concurrency = data.get("concurrency")
 
     def _convert_effects(self) -> None:
         """Turn the raw effect values into expressions.
@@ -369,6 +370,10 @@ class Spec:
         for v in self.vars.values():
             if v.kind == "int" and v.min is not None and v.max is not None and v.min > v.max:
                 raise SpecError(f"var {v.name} min>max")
+        if self.concurrency is not None:
+            from .concurrency import validate_concurrency
+
+            validate_concurrency(self)
         return True
 
     def _check_init_value(self, var: Var, raw: Any, where: str) -> None:

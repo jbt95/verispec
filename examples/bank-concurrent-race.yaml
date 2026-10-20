@@ -1,0 +1,43 @@
+spec_version: "1.0"
+name: BankConcurrentRace
+description: >
+  Two clients each run a check-then-transfer from A to B.  The commit step does
+  not re-check balance, so concurrent interleavings can overdraw A even though
+  each check alone succeeds.  Sequential BMC does not declare actors; use
+  `verispec check-concurrent` to explore interleavings.
+vars:
+  balance_a: {type: int, min: 0, max: 100}
+  balance_b: {type: int, min: 0, max: 100}
+init:
+  balance_a: "30"
+  balance_b: "70"
+actions:
+  - name: xfer_a_to_b_check
+    params:
+      amount: {type: int, min: 1, max: 50}
+    requires: ["amount > 0", "balance_a >= amount"]
+    effects: {}
+  - name: xfer_a_to_b_commit
+    params:
+      amount: {type: int, min: 1, max: 50}
+    requires: ["amount > 0"]
+    effects:
+      balance_a: "balance_a - amount"
+      balance_b: "balance_b + amount"
+invariants:
+  - {name: total_conserved, expr: "balance_a + balance_b == 100"}
+  - {name: non_negative, expr: "balance_a >= 0 and balance_b >= 0"}
+concurrency:
+  actors:
+    - id: client1
+      program:
+        - action: xfer_a_to_b_check
+          params: {amount: 25}
+        - action: xfer_a_to_b_commit
+          params: {amount: 25}
+    - id: client2
+      program:
+        - action: xfer_a_to_b_check
+          params: {amount: 25}
+        - action: xfer_a_to_b_commit
+          params: {amount: 25}
