@@ -49,6 +49,12 @@ format has its own version, carried by the `spec_version` field (see
   dual-level counterexamples.
 - **Added** refinement map comments to `verispec export-tla` output when
   `refines:` is present.
+- **Added** `verispec lsp` (optional `lsp` extra): validate/lint diagnostics,
+  hover, and go-to-definition.
+- **Added** VS Code language client wiring in `editors/vscode`.
+- **Added** CI templates for GitLab, Jenkins, and Azure Pipelines under `ci/`.
+- **Extended** `verispec report` with compliance audit HTML/JSON and optional
+  PDF (`pdf` extra), including bounded liveness and trace coverage when run.
 
 ### Release / supply chain
 

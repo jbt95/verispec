@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { startLanguageClient, stopLanguageClient } from './languageClient';
 
 /** Name of the diagnostic collection owned by this extension. */
 const DIAGNOSTIC_COLLECTION = 'verispec';
@@ -124,10 +125,14 @@ export function activate(context: vscode.ExtensionContext): void {
             }
         })
     );
+
+    if (configuration().get<boolean>('languageServer', true) !== false) {
+        startLanguageClient(context);
+    }
 }
 
 export function deactivate(): void {
-    // Every disposable is registered in `context.subscriptions`.
+    void stopLanguageClient();
 }
 
 /* ------------------------------------------------------------------ */

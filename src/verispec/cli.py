@@ -28,6 +28,7 @@ EXIT_SPEC_ERROR = 2
 EXIT_TOOL_ERROR = 3
 
 FORMATS = ("text", "json", "sarif")
+REPORT_FORMATS = ("html", "json", "pdf")
 
 
 # --------------------------------------------------------------------------
@@ -342,43 +343,56 @@ def cmd_brief(args) -> int:
 
 
 def cmd_report(args) -> int:
-    from .bmc import check
-    from .report import render_report, report_json
-    from .trace import check_trace
+    from .audit_report import (
+        build_audit_payload,
+        collect_audit_results,
+        render_audit_html,
+        render_audit_pdf,
+    )
 
     spec = _load_spec_or_die(args.spec)
-    results: list[dict[str, Any]] = []
-    bmc = check(spec, bound=args.bound, invariant_filter=args.invariant)
-    results.append(
-        {
-            "check": "check",
-            "status": bmc["status"],
-            "guarantee": bmc.get("guarantee"),
-            "bound": bmc.get("bound"),
-            "message": bmc.get("message"),
-        }
+    events = None
+    if getattr(args, "events", None):
+        events = [p.strip() for p in str(args.events).split(",") if p.strip()]
+    results = collect_audit_results(
+        spec,
+        bound=args.bound,
+        invariant_filter=args.invariant,
+        temporal_filter=getattr(args, "temporal", None),
+        skip_liveness=getattr(args, "skip_liveness", False),
+        trace_path=args.trace,
+        events_paths=events,
+        timeout_ms=args.timeout,
     )
-    if args.trace:
-        tres = check_trace(spec, args.trace)
-        results.append(
-            {
-                "check": "check-trace",
-                "status": "ok" if tres["ok"] else "violation",
-                "guarantee": tres.get("guarantee"),
-                "bound": "-",
-                "message": tres.get("message"),
-            }
-        )
+    ok = all(r["status"] == "ok" for r in results)
     if args.format == "json":
-        _print_json(report_json(spec, results))
-        return EXIT_OK if all(r["status"] == "ok" for r in results) else EXIT_VIOLATION
-    html = render_report(spec, results)
+        _print_json(build_audit_payload(spec, results))
+        return EXIT_OK if ok else EXIT_VIOLATION
+    if args.format == "pdf":
+        try:
+            blob = render_audit_pdf(spec, results)
+        except RuntimeError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return EXIT_TOOL_ERROR
+        if args.output:
+            Path(args.output).write_bytes(blob)
+            print(f"wrote report to {args.output}")
+        else:
+            sys.stdout.buffer.write(blob)
+        return EXIT_OK if ok else EXIT_VIOLATION
+    html = render_audit_html(spec, results)
     if args.output:
         Path(args.output).write_text(html)
         print(f"wrote report to {args.output}")
     else:
         print(html)
-    return EXIT_OK if all(r["status"] == "ok" for r in results) else EXIT_VIOLATION
+    return EXIT_OK if ok else EXIT_VIOLATION
+
+
+def cmd_lsp(_args) -> int:
+    from .lsp_server import serve
+
+    return serve()
 
 
 def cmd_view(args) -> int:
@@ -1065,14 +1079,29 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("-o", "--output")
     sp.set_defaults(func=cmd_brief)
 
-    sp = sub.add_parser("report", help="write the conformance report (HTML or JSON)")
+    sp = sub.add_parser("report", help="write the compliance audit report (HTML, JSON, or PDF)")
     sp.add_argument("spec")
     sp.add_argument("-o", "--output", help="output file (default: stdout)")
     sp.add_argument("--trace", help="also check this trace")
+    sp.add_argument(
+        "--events",
+        help="comma-separated coverage-events JSON files (with --trace)",
+    )
     sp.add_argument("--bound", type=int, default=10)
     sp.add_argument("--invariant")
-    _add_format(sp, default="html")
+    sp.add_argument("--temporal", help="only check this temporal property (liveness)")
+    sp.add_argument("--skip-liveness", action="store_true", help="safety invariants only")
+    sp.add_argument("--timeout", type=int, default=30000, help="solver timeout in ms")
+    sp.add_argument(
+        "--format",
+        choices=REPORT_FORMATS,
+        default="html",
+        help="output format",
+    )
     sp.set_defaults(func=cmd_report)
+
+    sp = sub.add_parser("lsp", help="run the language server (stdio, requires [lsp] extra)")
+    sp.set_defaults(func=cmd_lsp)
 
     sp = sub.add_parser("view", help="write the counterexample viewer (HTML)")
     sp.add_argument("spec")
