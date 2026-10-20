@@ -169,7 +169,8 @@ and JSON/SARIF formats are stable interfaces for other pipeline systems.
 For repositories with many specs, use `verispec check-suite` with a persistent
 cache directory so unchanged specs skip Z3 on reruns. Cache entries are keyed by
 the resolved spec (including imports), checker flags (`--bound`, timeouts,
-memory limits), and the installed VeriSpec version.
+memory limits, `--skip-liveness`, `--temporal`), and the installed VeriSpec
+version.
 
 ```yaml
 - uses: actions/checkout@v4
