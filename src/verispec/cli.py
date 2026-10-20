@@ -224,6 +224,29 @@ def cmd_prove(args) -> int:
     return EXIT_OK if result["status"] == "ok" else EXIT_VIOLATION
 
 
+def cmd_check_concurrent(args) -> int:
+    from .concurrency import check, format_result
+    from .sarif import to_sarif
+
+    spec = _load_spec_or_die(args.spec)
+    started = time.monotonic()
+    result = check(
+        spec,
+        bound=args.bound,
+        invariant_filter=args.invariant,
+    )
+    result["duration_ms"] = int((time.monotonic() - started) * 1000)
+    payload = _check_payload(spec, result)
+    payload["command"] = "check-concurrent"
+    if args.format == "json":
+        _print_json(payload)
+    elif args.format == "sarif":
+        _print_json(to_sarif(result, str(args.spec)))
+    else:
+        print(format_result(spec, result))
+    return EXIT_OK if result["status"] == "ok" else EXIT_VIOLATION
+
+
 def cmd_check_suite(args) -> int:
     from .check_config import config_from_namespace, resolve_cache_dir
     from .scaled_check import run_check_suite
@@ -1079,6 +1102,16 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("trace")
     _add_format(sp)
     sp.set_defaults(func=cmd_check_trace)
+
+    sp = sub.add_parser(
+        "check-concurrent",
+        help="explore actor interleavings with partial-order reduction",
+    )
+    sp.add_argument("spec")
+    sp.add_argument("--bound", type=int, default=10, help="maximum number of concurrent steps")
+    sp.add_argument("--invariant", help="only check this invariant")
+    _add_format(sp)
+    sp.set_defaults(func=cmd_check_concurrent)
 
     sp = sub.add_parser("gen-tests", help="generate property tests for an adapter")
     sp.add_argument("spec")

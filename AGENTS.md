@@ -19,3 +19,8 @@ ln -sf ../../skills/verispec .cursor/skills/verispec
 
 The canonical skill file lives under `skills/verispec/` so it stays portable across
 agent products (Cursor, Claude Code, Codex, etc.).
+
+## Repository conventions
+
+- Spec format changes need an RFC under `rfcs/` before implementation.
+- Put new verification modes in new modules; keep shared file edits small and additive.

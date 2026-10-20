@@ -67,6 +67,12 @@ verispec check examples/bank-buggy.yaml --bound 10
 That is the whole demo: a spec, a broken implementation, and the exact
 sequence of two transfers that breaks the contract.
 
+For concurrent clients, declare actors in the spec and run interleaving search:
+
+```bash
+verispec check-concurrent examples/bank-concurrent-race.yaml --bound 6
+```
+
 ## Start from a template
 
 ```bash
