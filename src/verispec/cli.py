@@ -371,6 +371,9 @@ def cmd_sign(args) -> int:
         note=args.note or "",
         use_gpg=args.gpg,
         gpg_key=args.gpg_key,
+        use_sigstore=args.sigstore,
+        sigstore_identity=args.sigstore_identity,
+        sigstore_issuer=args.sigstore_issuer,
     )
     if args.format == "json":
         _print_json(
@@ -387,9 +390,47 @@ def cmd_sign(args) -> int:
         print(f"signature written to {path}")
         if args.gpg:
             print("  GPG signature attached")
+        elif args.sigstore:
+            print("  Sigstore signature attached")
         else:
             print("  No cryptographic signature: the approver is a recorded claim.")
     return EXIT_OK
+
+
+def cmd_policy_check(args) -> int:
+    from .policy import DEFAULT_POLICY_PATH, run_policy_check
+    from .policy_sarif import policy_to_sarif
+
+    policy_path = Path(args.policy) if args.policy else DEFAULT_POLICY_PATH
+    try:
+        report = run_policy_check(policy_path, repo_root=args.repo_root)
+    except SpecError as error:
+        if args.format == "json":
+            _print_json(
+                {
+                    "tool": "verispec",
+                    "command": "policy-check",
+                    "status": "spec-error",
+                    "message": str(error),
+                }
+            )
+        else:
+            print(f"ERROR: {error}")
+        return EXIT_SPEC_ERROR
+
+    if args.format == "json":
+        _print_json(report)
+    elif args.format == "sarif":
+        _print_json(policy_to_sarif(report))
+    else:
+        if report["ok"]:
+            print(f"OK: policy satisfied ({report['policy']['entries']} entries)")
+        else:
+            print(f"FAILED: {report['errors']} policy error(s)")
+        for finding in report["findings"]:
+            where = f" [{finding['path']}]" if finding.get("path") else ""
+            print(f"{finding['level'].upper()}: {finding['code']}{where}: {finding['message']}")
+    return EXIT_OK if report["ok"] else EXIT_VIOLATION
 
 
 def cmd_verify_signature(args) -> int:
@@ -646,6 +687,8 @@ def _add_format(p, default: str = "text") -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    from .policy import DEFAULT_POLICY_PATH
+
     p = argparse.ArgumentParser(
         prog="verispec",
         description=(
@@ -744,9 +787,30 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--note", help="free text note")
     sp.add_argument("--gpg", action="store_true", help="also create a GPG detached signature")
     sp.add_argument("--gpg-key", help="GPG key id")
+    sp.add_argument(
+        "--sigstore",
+        action="store_true",
+        help="also create a keyless Sigstore signature (requires cosign)",
+    )
+    sp.add_argument("--sigstore-identity", help="expected Sigstore certificate identity (verify)")
+    sp.add_argument("--sigstore-issuer", help="expected Sigstore OIDC issuer (verify)")
     sp.add_argument("-o", "--output", help="signature file (default: <spec>.signature.json)")
     _add_format(sp)
     sp.set_defaults(func=cmd_sign)
+
+    policy = sub.add_parser("policy", help="enterprise repository governance policy")
+    policy_sub = policy.add_subparsers(dest="policy_cmd", required=True)
+    sp = policy_sub.add_parser("check", help="enforce .verispec/policy.yaml in CI")
+    sp.add_argument(
+        "--policy",
+        help=f"path to policy file (default: {DEFAULT_POLICY_PATH.as_posix()})",
+    )
+    sp.add_argument(
+        "--repo-root",
+        help="repository root for resolving paths (default: parent of .verispec/)",
+    )
+    _add_format(sp)
+    sp.set_defaults(func=cmd_policy_check)
 
     sp = sub.add_parser("verify-signature", help="verify that a spec still matches its signature")
     sp.add_argument("spec")

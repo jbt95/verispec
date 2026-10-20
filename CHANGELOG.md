@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **Added** enterprise repository governance: `.verispec/policy.yaml` and
+  `verispec policy check` with JSON and SARIF output for CI.
+- **Added** optional keyless Sigstore signing on `verispec sign --sigstore`
+  (cosign CLI) alongside existing GPG digest signing.
+- **Added** CycloneDX SBOM and build provenance attestations to the release
+  workflow; verification steps documented in `SECURITY.md`.
+
 All notable changes to VeriSpec are documented here. The project follows
 [semantic versioning](https://semver.org/) for the package, and the spec
 format has its own version, carried by the `spec_version` field (see

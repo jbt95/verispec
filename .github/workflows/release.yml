@@ -16,6 +16,10 @@ jobs:
     needs: verify
     name: Build the distributions
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -45,6 +49,17 @@ jobs:
         run: |
           python -m pip install --upgrade build
           python -m build --outdir dist
+      - name: Generate CycloneDX SBOM
+        run: |
+          python -m pip install --upgrade cyclonedx-bom
+          cyclonedx-py environment --output-format json -o dist/verispec-sbom.cdx.json
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            dist/*.whl
+            dist/*.tar.gz
+            dist/verispec-sbom.cdx.json
       - name: Smoke test installed wheel and bundled registry
         run: |
           set -euo pipefail
@@ -77,6 +92,7 @@ jobs:
           path: |
             dist/*.whl
             dist/*.tar.gz
+            dist/verispec-sbom.cdx.json
       - uses: actions/upload-artifact@v4
         with:
           name: npm-distribution
@@ -139,4 +155,5 @@ jobs:
           files: |
             dist/*.whl
             dist/*.tar.gz
+            dist/verispec-sbom.cdx.json
             npm-package/*.tgz
