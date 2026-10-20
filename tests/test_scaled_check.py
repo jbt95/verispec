@@ -8,8 +8,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from verispec.check_config import CheckConfig, cache_key_digest
 from verispec.check_cache import read_cached_result, write_cached_result
+from verispec.check_config import CheckConfig, cache_key_digest
 from verispec.model import load_spec
 from verispec.scaled_check import merge_invariant_results, run_bounded_check, run_check_suite
 

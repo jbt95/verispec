@@ -132,8 +132,8 @@ def cmd_lint(args) -> int:
 def cmd_check(args) -> int:
     from .bmc import check, format_result
     from .check_config import config_from_namespace, resolve_cache_dir
-    from .scaled_check import run_bounded_check
     from .sarif import to_sarif
+    from .scaled_check import run_bounded_check
 
     spec = _load_spec_or_die(args.spec)
     config = config_from_namespace(args)

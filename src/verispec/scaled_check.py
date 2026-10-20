@@ -8,7 +8,6 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
-from .bmc import check
 from .check_cache import read_cached_result, write_cached_result
 from .check_config import CheckConfig, cache_key_digest
 from .errors import SpecError
@@ -72,9 +71,7 @@ def _parallel_invariants(spec: Spec, config: CheckConfig) -> dict[str, Any]:
 
     results: list[tuple[str, dict[str, Any]]] = []
     with ProcessPoolExecutor(max_workers=_worker_cap(len(names))) as pool:
-        futures = {
-            pool.submit(_run_one_invariant, spec_path, config, name): name for name in names
-        }
+        futures = {pool.submit(_run_one_invariant, spec_path, config, name): name for name in names}
         for future in as_completed(futures):
             name = futures[future]
             results.append((name, future.result()))
@@ -150,9 +147,7 @@ def run_check_suite(
         cache_s = str(cache_dir) if cache_dir else None
         by_path: dict[str, dict[str, Any]] = {}
         with ProcessPoolExecutor(max_workers=workers) as pool:
-            futures = {
-                pool.submit(_suite_worker, p, config, cache_s): p for p in ordered_paths
-            }
+            futures = {pool.submit(_suite_worker, p, config, cache_s): p for p in ordered_paths}
             for future in as_completed(futures):
                 row = future.result()
                 by_path[row["spec_path"]] = row
