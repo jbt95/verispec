@@ -20,7 +20,6 @@ from typing import Any
 from . import __version__
 from .errors import SpecError
 from .model import load_spec
-from .sign import spec_digest
 
 EXIT_OK = 0
 EXIT_VIOLATION = 1
@@ -41,6 +40,8 @@ def _print_json(payload: Any) -> None:
 
 
 def _spec_payload(spec) -> dict[str, Any]:
+    from .sign import spec_digest
+
     return {
         "name": spec.name,
         "path": str(spec.path),
@@ -513,7 +514,7 @@ def cmd_init(args) -> int:
 
 
 def cmd_sign(args) -> int:
-    from .sign import default_signature_path, write_signature
+    from .sign import default_signature_path, spec_digest, write_signature
 
     spec = _load_spec_or_die(args.spec)
     path = Path(args.output) if args.output else default_signature_path(args.spec)
@@ -722,6 +723,50 @@ def cmd_corpus(args) -> int:
                 print(f"         {case.get('error')}")
         print(f"{result['cases']} case(s), {result['failures']} failure(s)")
     return EXIT_OK if result["ok"] else EXIT_VIOLATION
+
+
+def cmd_bench(args) -> int:
+    from .benchmark_harness import run_benchmarks, run_smoke_gate
+
+    root = Path(args.root).resolve()
+    if args.smoke:
+        ok, failures = run_smoke_gate(
+            root,
+            Path(args.baseline).resolve(),
+            factor=args.factor,
+        )
+        payload = {"tool": "verispec", "command": "bench", "smoke": True, "ok": ok, "failures": failures}
+        if args.format == "json":
+            _print_json(payload)
+        elif ok:
+            print("benchmark smoke: ok")
+        else:
+            for line in failures:
+                print(f"REGRESSION: {line}", file=sys.stderr)
+        return EXIT_OK if ok else EXIT_TOOL_ERROR
+
+    results = run_benchmarks(
+        root,
+        bound=args.bound,
+        prove_k=args.prove_k,
+        concurrent_bound=args.concurrent_bound,
+        suite_jobs=args.jobs,
+        repeats=max(1, args.repeats),
+        quick=args.quick,
+    )
+    rows = [row.to_dict() for row in results]
+    if args.format == "json":
+        _print_json({"tool": "verispec", "command": "bench", "results": rows})
+    else:
+        print(f"{'name':<28} {'category':<16} {'wall_ms':>10} {'rss_mb':>8} {'status':<10}")
+        for row in rows:
+            print(
+                f"{row['name']:<28} {row['category']:<16} "
+                f"{row['wall_ms']:>10.2f} {row['peak_rss_mb']:>8.2f} {row['status']:<10}"
+            )
+    if args.output:
+        Path(args.output).write_text(json.dumps({"results": rows}, indent=2) + "\n")
+    return EXIT_OK
 
 
 def cmd_mcp(args) -> int:
@@ -1325,6 +1370,34 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--bound", type=int, default=8)
     _add_format(sp)
     sp.set_defaults(func=cmd_corpus)
+
+    sp = sub.add_parser("bench", help="run performance benchmarks or CI smoke gate")
+    sp.add_argument("--root", default=".", help="repository root (default: cwd)")
+    sp.add_argument("--bound", type=int, default=6, help="BMC / liveness bound for timed checks")
+    sp.add_argument("--prove-k", type=int, default=2, help="k-induction parameter for prove bench")
+    sp.add_argument("--concurrent-bound", type=int, default=3, help="bound for check-concurrent bench")
+    sp.add_argument("--jobs", type=int, default=2, help="parallel jobs for warm check-suite bench")
+    sp.add_argument("--repeats", type=int, default=2, help="median over this many timed runs")
+    sp.add_argument("--quick", action="store_true", help="subset of cases (faster)")
+    sp.add_argument("-o", "--output", help="write JSON results to a file")
+    sp.add_argument(
+        "--smoke",
+        action="store_true",
+        help="compare quick benchmarks against benchmarks/baseline_smoke.json",
+    )
+    sp.add_argument(
+        "--baseline",
+        default="benchmarks/baseline_smoke.json",
+        help="baseline medians for --smoke",
+    )
+    sp.add_argument(
+        "--factor",
+        type=float,
+        default=3.0,
+        help="smoke gate: fail when wall_ms exceeds baseline * factor",
+    )
+    _add_format(sp)
+    sp.set_defaults(func=cmd_bench)
 
     sp = sub.add_parser("mcp", help="run the MCP server on stdio")
     sp.set_defaults(func=cmd_mcp)

@@ -46,4 +46,4 @@ def write_cached_result(cache_dir: Path, key_digest: str, result: dict[str, Any]
     cache_dir.mkdir(parents=True, exist_ok=True)
     path = cache_entry_path(cache_dir, key_digest)
     payload = {"key": key_digest, "result": normalize_for_json(result)}
-    path.write_text(json.dumps(payload, sort_keys=True, indent=2) + "\n")
+    path.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n")

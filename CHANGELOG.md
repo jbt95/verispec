@@ -7,6 +7,15 @@ format has its own version, carried by the `spec_version` field (see
 
 ## [Unreleased]
 
+### Performance
+
+- **Added** `verispec bench` and `benchmarks/` harness (wall time, RSS, smoke gate vs
+  `baseline_smoke.json`).
+- **Added** mtime-keyed `load_spec` LRU cache for repeated loads in suites and CLI.
+- **Changed** check cache entries to compact JSON (same semantics, faster writes).
+- **Changed** BMC transition encoding helpers shared for maintainability; optional
+  incremental deepening path kept for equivalence tests (not default after profiling).
+
 ### Runtime conformance
 
 - **Added** `verispec observe-runtime`: map OTLP JSON exports, NDJSON structured

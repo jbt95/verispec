@@ -20,6 +20,7 @@ adapters/c/*.a
 
 # Node
 bench/.scale-cache/
+benchmarks/.bench-cache/
 
 node_modules/
 editors/vscode/out/
