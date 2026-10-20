@@ -88,7 +88,11 @@ def index_spec_text(text: str, path: str = "<spec>") -> SpecSourceIndex:
         if re.match(r"^imports\s*:", stripped):
             section = "imports"
             continue
-        if stripped and not stripped.startswith("#") and re.match(r"^[A-Za-z_][A-Za-z0-9_]*\s*:", stripped):
+        if (
+            stripped
+            and not stripped.startswith("#")
+            and re.match(r"^[A-Za-z_][A-Za-z0-9_]*\s*:", stripped)
+        ):
             if not line.startswith(" ") and not line.startswith("\t"):
                 section = ""
 
@@ -133,21 +137,15 @@ def index_spec_text(text: str, path: str = "<spec>") -> SpecSourceIndex:
                 imp_path = mp.group(1).strip("'\"")
                 resolved = str((base / imp_path).resolve())
                 col = mp.start(1)
-                symbols.append(
-                    Symbol("import_path", imp_path, i, col, target_path=resolved)
-                )
+                symbols.append(Symbol("import_path", imp_path, i, col, target_path=resolved))
                 if alias:
-                    symbols.append(
-                        Symbol("import_ref", alias, i, col - 20, target_path=resolved)
-                    )
+                    symbols.append(Symbol("import_ref", alias, i, col - 20, target_path=resolved))
 
     _index_references(symbols, lines, path, base)
     return SpecSourceIndex(path=path, symbols=symbols)
 
 
-def _index_references(
-    symbols: list[Symbol], lines: list[str], path: str, base: Path
-) -> None:
+def _index_references(symbols: list[Symbol], lines: list[str], path: str, base: Path) -> None:
     known = {s.name for s in symbols}
     import_aliases = {s.name: s for s in symbols if s.kind == "import"}
     for i, line in enumerate(lines):

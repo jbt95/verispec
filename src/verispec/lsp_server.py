@@ -12,9 +12,7 @@ from .spec_diagnostics import collect_spec_diagnostics
 
 __all__ = ["serve", "missing_lsp_extra_message"]
 
-_MISSING = (
-    "VeriSpec LSP requires the optional 'lsp' extra: pip install 'verispec[lsp]'"
-)
+_MISSING = "VeriSpec LSP requires the optional 'lsp' extra: pip install 'verispec[lsp]'"
 
 
 def missing_lsp_extra_message() -> str:
@@ -43,9 +41,7 @@ def serve() -> int:
             return None
         return {
             "vars": {n: str(v.type) for n, v in spec.vars.items()},
-            "actions": [
-                {"name": a.name, "params": list(a.params.keys())} for a in spec.actions
-            ],
+            "actions": [{"name": a.name, "params": list(a.params.keys())} for a in spec.actions],
             "invariants": list(spec.invariants),
         }
 
@@ -64,7 +60,9 @@ def serve() -> int:
             )
             for d in diags
         ]
-        ls.text_document_publish_diagnostics(types.PublishDiagnosticsParams(uri=uri, diagnostics=items))
+        ls.text_document_publish_diagnostics(
+            types.PublishDiagnosticsParams(uri=uri, diagnostics=items)
+        )
 
     @server.feature(types.TEXT_DOCUMENT_DID_OPEN)
     def did_open(ls: LanguageServer, params: types.DidOpenTextDocumentParams) -> None:
