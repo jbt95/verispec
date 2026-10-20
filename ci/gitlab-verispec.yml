@@ -1,0 +1,40 @@
+# VeriSpec pipeline (GitLab CI) — equivalent to the GitHub composite Action.
+# Copy to `.gitlab-ci.yml` or include from your project.
+#
+# Variables (CI/CD settings or `.gitlab-ci.yml`):
+#   VERISPEC_SPEC        — path to the entry spec (required)
+#   VERISPEC_TRACES      — comma-separated JSON traces (optional)
+#   VERISPEC_BOUND       — BMC depth (default 10)
+#   VERISPEC_TIMEOUT_MS  — solver timeout (default 30000)
+
+stages:
+  - verify
+
+verispec:
+  stage: verify
+  image: python:3.11-bookworm
+  variables:
+    VERISPEC_BOUND: "10"
+    VERISPEC_TIMEOUT_MS: "30000"
+  script:
+    - python -m pip install --upgrade pip
+    - python -m pip install "verispec @ git+https://github.com/verispec/verispec.git@main"
+    - test -n "$VERISPEC_SPEC"
+    - verispec validate "$VERISPEC_SPEC"
+    - verispec lint "$VERISPEC_SPEC"
+    - verispec check "$VERISPEC_SPEC" --bound "$VERISPEC_BOUND" --timeout "$VERISPEC_TIMEOUT_MS"
+    - |
+      if [ -n "${VERISPEC_TRACES:-}" ]; then
+        IFS=',' read -ra traces <<< "$VERISPEC_TRACES"
+        for t in "${traces[@]}"; do
+          t="$(echo "$t" | tr -d '[:space:]')"
+          [ -z "$t" ] && continue
+          verispec check-trace "$VERISPEC_SPEC" "$t"
+        done
+      fi
+    - verispec report "$VERISPEC_SPEC" --bound "$VERISPEC_BOUND" -o verispec-report.html
+  artifacts:
+    when: always
+    paths:
+      - verispec-report.html
+    expire_in: 14 days

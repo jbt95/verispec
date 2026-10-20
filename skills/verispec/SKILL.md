@@ -188,15 +188,20 @@ verispec export-lean examples/bank.yaml -o Bank.lean
 verispec brief examples/bank.yaml -o AGENT_BRIEF.md
 ```
 
-### `report` / `view` — HTML or JSON reports
+### `report` / `view` — audit HTML, JSON, optional PDF
 
 ```bash
 verispec report examples/bank.yaml --bound 10 -o report.html
 verispec report examples/bank.yaml --trace examples/traces/bank-valid.json --format json
+verispec report examples/bank.yaml --format pdf -o report.pdf   # requires [pdf]
 verispec view examples/bank-buggy.yaml --bound 10 -o counterexample.html
 ```
 
-`report` flags: `-o`, `--trace`, `--bound`, `--invariant`, `--format` (default html).
+`report` flags: `-o`, `--trace`, `--events`, `--bound`, `--invariant`, `--temporal`,
+`--skip-liveness`, `--timeout`, `--format` (`html`, `json`, or `pdf`). The HTML report
+is self-contained (no external assets) and includes dependency digests, bounded
+liveness (when the spec declares `temporal`), trace coverage (with `--trace`),
+signatures, and counterexamples when present.
 
 ### `init` — template scaffold
 
@@ -266,6 +271,19 @@ verispec diff-trace examples/traces/bank-valid.json examples/traces/bank-valid.j
 ```
 
 Exit `1` if traces diverge.
+
+### `lsp` — language server (optional `lsp` extra)
+
+Stdio LSP for editors: validate/lint diagnostics, hover on vars/actions/invariants,
+and go-to-definition (including import paths).
+
+```bash
+pip install -e ".[lsp]"
+verispec lsp
+```
+
+The VS Code extension in `editors/vscode` starts `verispec lsp` when
+`verispec.languageServer` is enabled (default).
 
 ### `monitor` — check a trace file (optional follow)
 
