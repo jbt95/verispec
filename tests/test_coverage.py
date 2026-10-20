@@ -43,7 +43,7 @@ def test_events_record_guard_false(tmp_path):
             }
         )
     )
-    events = load_coverage_events(events_path)
+    load_coverage_events(events_path)
     report = collect_coverage(spec, events_paths=[events_path])
     guard = next(g for g in report.guards if g["action"] == "transfer_a_to_b" and g["index"] == 1)
     assert guard["covered_false"]

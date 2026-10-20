@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from verispec.cli import EXIT_OK, EXIT_VIOLATION, main  # noqa: E402
+from verispec.cli import EXIT_OK, main  # noqa: E402
 from verispec.drift import check_drift  # noqa: E402
 from verispec.model import load_spec  # noqa: E402
 

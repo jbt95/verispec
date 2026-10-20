@@ -80,7 +80,7 @@ def _empty_report(spec: Spec) -> CoverageReport:
                     "action": a.name,
                     "param": pn,
                     "boundaries": boundaries,
-                    "covered": {b: False for b in boundaries},
+                    "covered": dict.fromkeys(boundaries, False),
                 }
             )
     return CoverageReport(actions=actions, guards=guards, invariants=invariants, parameters=parameters)
