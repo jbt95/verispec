@@ -21,7 +21,7 @@
     "build:cjs": "tsc -p tsconfig.cjs.json",
     "gen": "verispec gen-tests ../../examples/bank.yaml --lang typescript -o test/bank.verispec.test.ts && verispec gen-tests ../../examples/bank.yaml --lang javascript -o test/js/bank.verispec.test.js",
     "pretest": "npm run gen",
-    "test": "npm run build && node --test dist/esm/test/ test/js/",
+    "test": "npm run build && node --test dist/esm/test/*.js test/js/*.js",
     "prepublishOnly": "npm run build"
   },
   "keywords": ["verispec", "formal-methods", "trace", "conformance", "testing", "javascript"],
