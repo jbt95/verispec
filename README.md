@@ -192,6 +192,45 @@ imported dependency, the Action requires the configured approval label and a
 non-author human approval review on the current PR head. See
 [the CI guide](docs/ci.md) for the permissions and race checks.
 
+## Escalating verification and spec-strength diagnostics
+
+Two optional workflows port *ideas* from recent agent-evaluation papers into
+VeriSpec’s formal setting (no ML training, no LLM in the core):
+
+**Escalating verification loop** ([VeriCUA](https://arxiv.org/abs/2610.26469)):
+each invariant (and optional trace conformance) is a check with tri-state status
+`satisfied` / `violated` / `unresolved`. Cheap evidence runs first (trace replay
+and bounded random walks, like generated property tests); still-unresolved checks
+escalate to Z3 with a larger bound (default **K=2** rounds). The loop stops at
+the first counterexample. Reports name the condition and where evidence lives
+(state variables, trace step) and record cost (rounds, backend calls, time).
+
+```bash
+verispec verify-loop examples/bank.yaml --trace examples/traces/bank-valid.json
+verispec verify-loop examples/bank-buggy.yaml --rounds 2 --format json
+```
+
+**Spec-strength / vacuity** ([StepBench](https://arxiv.org/abs/2610.26679)):
+from a known-good trace (or a model-generated walk), build mutants that omit a
+recorded step, swap two steps, or replace an action while keeping the wrong
+state. Mutants the spec still accepts are reported as *survived* (the contract
+may be too weak). Caught mutants get a typed failure label (`missing_step`,
+`misordered_step`, `extraneous_step`, `invariant_contradiction`).
+
+```bash
+verispec spec-strength examples/bank.yaml --trace examples/traces/bank-valid.json
+```
+
+**Coverage and drift.** `verispec coverage` summarises which parts of the spec
+were exercised by traces (and optional test-event recordings), with
+`--fail-under` for CI. `verispec drift` compares a git range to per-action
+`implements` mappings and warns when code and contract move independently. The
+GitHub Action accepts `drift-check: true` for PR annotations.
+
+Not ported: RL fine-tuning, LLM judges, or GUI automation from those papers—only
+the verification-loop and perturbation-diagnosis patterns, adapted to YAML specs,
+Z3, and trace conformance.
+
 ## What VeriSpec does not claim
 
 VeriSpec labels every result with the guarantee it carries:

@@ -1,0 +1,17 @@
+spec_version: "1.0"
+name: TemporalStutter
+vars:
+  phase: {type: "enum[pending,done]"}
+init:
+  phase: pending
+actions:
+  - name: complete
+    requires: ['phase == "pending"']
+    effects:
+      phase: done
+invariants:
+  - {name: ok, expr: "true"}
+temporal:
+  - name: eventually_done
+    kind: eventually
+    goal: 'phase == "done"'

@@ -1,4 +1,4 @@
-# RFC-0002: Concurrent actors and interleaving exploration
+# RFC-0003: Concurrent actors and interleaving exploration
 
 - Status: ACCEPTED
 - Date: 2026-10-20

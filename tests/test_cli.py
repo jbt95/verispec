@@ -26,8 +26,17 @@ def run(capsys, *args):
     return code, out.out, out.err
 
 
-def test_check_unknown_reports_what_it_proved(capsys):
-    # a timeout must not throw away the bounds that were decided
+def test_check_unknown_reports_what_it_proved(capsys, monkeypatch):
+    # Iterative deepening must keep bounds that were already proved when a later
+    # depth returns unknown (do not depend on Z3 timing).
+    from verispec import bmc
+
+    def fake_check_one(spec, bound, invariant_filter=None, timeout_ms=30000):
+        if bound < 7:
+            return {"status": "ok"}
+        return {"status": "unknown", "reason": "timeout", "message": "solver timeout"}
+
+    monkeypatch.setattr(bmc, "_check_one", fake_check_one)
     code, out, _ = run(capsys, "check", BANK, "--bound", "8", "--timeout", "1")
     assert code == EXIT_VIOLATION
     assert "no violation up to bound" in out

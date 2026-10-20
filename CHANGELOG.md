@@ -9,13 +9,28 @@ format has its own version, carried by the `spec_version` field (see
 
 ### Spec format
 
-- **Added** optional `concurrency.actors` with per-actor action programs (RFC-0002).
+- **Added** optional `fairness` (weak/strong action lists) and `temporal`
+  properties (`eventually`, `leads_to`) per [RFC-0002](rfcs/0002-temporal-liveness.md).
+  Existing specs without these fields are unchanged.
+- **Added** optional `concurrency.actors` with per-actor action programs
+  ([RFC-0003](rfcs/0003-concurrency-actors.md)).
 - **Added** optional `actor` field on JSON trace steps when a spec declares actors.
 
 ### CLI
 
+- **Added** bounded liveness checking to `verispec check` (lasso counterexamples),
+  with `--skip-liveness` and `--temporal <name>`.
+- **Added** pending temporal obligations at trace end in `verispec check-trace`.
+- **Extended** `export-tla` with temporal formulas and fairness conjuncts.
 - **Added** `verispec check-concurrent` to explore actor interleavings up to a
   step bound with partial-order reduction.
+- **Added** `verispec coverage`: report exercised actions, guards, invariants,
+  and parameter boundaries from traces and optional coverage-events JSON, with
+  `--fail-under` for CI and SARIF output.
+- **Added** `verispec drift`: compare a git range against per-action
+  `implements` mappings and flag spec/digest vs implementation mismatches.
+- **Added** GitHub Action input `drift-check` to annotate pull requests when
+  drift is detected.
 
 ## [1.0.0] - 2026-10-19
 

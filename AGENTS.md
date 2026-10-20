@@ -1,5 +1,26 @@
-# Agent notes
+# Agent instructions
 
-- Read `skills/verispec/SKILL.md` before changing VeriSpec behaviour or CLI.
+Coding agents working in this repository should follow the human-owned spec rule:
+**never edit a VeriSpec YAML contract to make a check pass** — fix the implementation.
+
+## VeriSpec CLI skill
+
+Install, command reference, exit codes, and MCP usage for the `verispec` CLI are in:
+
+**[`skills/verispec/SKILL.md`](skills/verispec/SKILL.md)**
+
+Cursor and other tools that load skills from `.cursor/skills/` can symlink or copy
+that folder:
+
+```bash
+mkdir -p .cursor/skills
+ln -sf ../../skills/verispec .cursor/skills/verispec
+```
+
+The canonical skill file lives under `skills/verispec/` so it stays portable across
+agent products (Cursor, Claude Code, Codex, etc.).
+
+## Repository conventions
+
 - Spec format changes need an RFC under `rfcs/` before implementation.
-- Put new verification modes in new modules; keep shared file edits small.
+- Put new verification modes in new modules; keep shared file edits small and additive.

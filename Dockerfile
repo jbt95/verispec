@@ -9,8 +9,9 @@
 FROM python:3.11-slim AS builder
 
 WORKDIR /build
-COPY pyproject.toml README.md ./
+COPY pyproject.toml README.md LICENSE ./
 COPY src ./src
+COPY registry ./registry
 RUN python -m pip install --no-cache-dir --upgrade pip build \
     && python -m pip wheel --no-cache-dir --wheel-dir /wheels .
 
