@@ -274,6 +274,25 @@ verispec monitor traces/live.json --spec examples/bank.yaml
 verispec monitor traces/live.json --spec examples/bank.yaml --follow --interval 1.0
 ```
 
+### `observe-runtime` — OTLP / logs → trace steps (streaming)
+
+Map OpenTelemetry spans or structured JSON logs to VeriSpec steps with a YAML
+mapping file; checks conformance online.  Local by default (optional `--webhook`).
+
+```bash
+verispec observe-runtime --spec examples/bank.yaml \
+  --mapping examples/runtime-observe/bank-mapping.yaml \
+  --input examples/runtime-observe/bank-otlp.json
+
+cat examples/runtime-observe/bank-logs.ndjson | verispec observe-runtime \
+  --spec examples/bank.yaml --mapping examples/runtime-observe/bank-mapping.yaml --stdin
+
+verispec observe-runtime --spec examples/bank.yaml \
+  --mapping examples/runtime-observe/bank-mapping.yaml --listen 127.0.0.1:4318 --stream
+```
+
+See `docs/runtime-observe.md`.
+
 ### `corpus` — run conformance fixtures
 
 ```bash

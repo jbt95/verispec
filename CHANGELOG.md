@@ -7,6 +7,13 @@ format has its own version, carried by the `spec_version` field (see
 
 ## [Unreleased]
 
+### Runtime conformance
+
+- **Added** `verispec observe-runtime`: map OTLP JSON exports, NDJSON structured
+  logs, or a local OTLP/HTTP JSON receiver into VeriSpec trace steps via a
+  declarative mapping file, with optional streaming JSON lines and violation
+  webhooks.  See `docs/runtime-observe.md` and `examples/runtime-observe/`.
+
 ### Spec format
 
 - **Added** optional `fairness` (weak/strong action lists) and `temporal`

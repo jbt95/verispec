@@ -169,6 +169,15 @@ verispec check-trace specs/bank.verispec.yaml traces/production.json
 # step 42: effect mismatch for action transfer_a_to_b: expected {...}, got {...}
 ```
 
+For OpenTelemetry or structured logs, map telemetry to steps and check online
+([`docs/runtime-observe.md`](docs/runtime-observe.md)):
+
+```bash
+verispec observe-runtime --spec examples/bank.yaml \
+  --mapping examples/runtime-observe/bank-mapping.yaml \
+  --input examples/runtime-observe/bank-otlp.json
+```
+
 ## CI
 
 The GitHub Action checks the spec and your traces, uploads SARIF for code
