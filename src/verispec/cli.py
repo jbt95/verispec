@@ -48,7 +48,9 @@ def _spec_payload(spec) -> dict[str, Any]:
     }
 
 
-def _check_payload(spec, result: dict[str, Any], extra: dict[str, Any] | None = None) -> dict[str, Any]:
+def _check_payload(
+    spec, result: dict[str, Any], extra: dict[str, Any] | None = None
+) -> dict[str, Any]:
     payload = {
         "tool": "verispec",
         "version": __version__,
@@ -62,8 +64,18 @@ def _check_payload(spec, result: dict[str, Any], extra: dict[str, Any] | None = 
         "violated": result.get("violated", []),
         "violations": result.get("violations", []),
         "trace": result.get("trace", []),
+        "lasso": result.get("lasso"),
+        "liveness": result.get("liveness"),
     }
-    for key in ("induction_k", "proof_method", "induction_cex", "reason"):
+    for key in (
+        "induction_k",
+        "proof_method",
+        "induction_cex",
+        "reason",
+        "safety_only",
+        "temporal_scope",
+        "temporal_note",
+    ):
         if key in result:
             payload[key] = result[key]
     if extra:
@@ -126,8 +138,7 @@ def cmd_lint(args) -> int:
             where = f" [{f['where']}]" if f["where"] else ""
             print(f"{f['level'].upper()}: {f['code']}{where}: {f['message']}")
         print(
-            f"{result['errors']} error(s), {result['warnings']} warning(s), "
-            f"{result['infos']} info"
+            f"{result['errors']} error(s), {result['warnings']} warning(s), {result['infos']} info"
         )
     return EXIT_OK if result["ok"] else EXIT_VIOLATION
 
@@ -137,6 +148,7 @@ def cmd_check(args) -> int:
     from .prove import format_result as format_prove_result
     from .prove import prove
     from .sarif import to_sarif
+    from .temporal import check_temporal_bounded, merge_check_with_liveness
 
     spec = _load_spec_or_die(args.spec)
     started = time.monotonic()
@@ -160,6 +172,14 @@ def cmd_check(args) -> int:
         )
         format_fn = format_result
         command_name = "check"
+        if not args.skip_liveness and spec.temporal and result.get("status") == "ok":
+            liveness = check_temporal_bounded(
+                spec,
+                bound=args.bound,
+                property_filter=args.temporal,
+                timeout_ms=args.timeout,
+            )
+            result = merge_check_with_liveness(result, liveness)
     result["duration_ms"] = int((time.monotonic() - started) * 1000)
     payload = _check_payload(spec, result, extra={"command": command_name})
     if args.format == "json":
@@ -168,6 +188,14 @@ def cmd_check(args) -> int:
         _print_json(to_sarif(result, str(args.spec)))
     else:
         print(format_fn(spec, result))
+        if (
+            not getattr(args, "unbounded", False)
+            and result.get("liveness")
+            and result["liveness"].get("status") == "violation"
+        ):
+            from .temporal import format_liveness_result
+
+            print(format_liveness_result(spec, result["liveness"]))
     return EXIT_OK if result["status"] == "ok" else EXIT_VIOLATION
 
 
@@ -217,6 +245,7 @@ def cmd_check_trace(args) -> int:
         "expected": result.get("expected"),
         "got": result.get("got"),
         "violated": result.get("violated", []),
+        "temporal": result.get("temporal"),
     }
     if args.format == "json":
         _print_json(payload)
@@ -606,6 +635,149 @@ def cmd_gen_harness(args) -> int:
     return EXIT_OK
 
 
+def cmd_verify_loop(args) -> int:
+    from .trace import load_trace
+    from .verify_loop import format_verify_loop, run_verify_loop
+
+    spec = _load_spec_or_die(args.spec)
+    trace = None
+    if args.trace:
+        trace = load_trace(args.trace)
+    report = run_verify_loop(
+        spec,
+        trace=trace,
+        max_rounds=args.rounds,
+        fuzz_bound=args.fuzz_bound,
+        fuzz_trials=args.fuzz_trials,
+        z3_bound=args.z3_bound,
+        timeout_ms=args.timeout,
+        seed=args.seed,
+    )
+    payload = {
+        "tool": "verispec",
+        "version": __version__,
+        "command": "verify-loop",
+        "spec": _spec_payload(spec),
+        **report.to_dict(),
+    }
+    if args.format == "json":
+        _print_json(payload)
+    else:
+        print(format_verify_loop(report))
+    if report.verdict == "failure":
+        return EXIT_VIOLATION
+    if report.verdict == "uncertain":
+        return EXIT_VIOLATION
+    return EXIT_OK
+
+
+def _parse_list_arg(value: str | None) -> list[str]:
+    if not value:
+        return []
+    return [part.strip() for part in value.split(",") if part.strip()]
+
+
+def cmd_coverage(args) -> int:
+    from .coverage import collect_coverage, format_coverage, threshold_met
+    from .coverage_sarif import coverage_to_sarif
+
+    spec = _load_spec_or_die(args.spec)
+    report = collect_coverage(
+        spec,
+        traces=_parse_list_arg(args.trace),
+        events_paths=_parse_list_arg(args.events),
+    )
+    below = not threshold_met(report, args.fail_under)
+    payload = {
+        "tool": "verispec",
+        "version": __version__,
+        "command": "coverage",
+        "spec": _spec_payload(spec),
+        "status": "ok" if not below else "violation",
+        **report.to_dict(),
+    }
+    if args.format == "json":
+        _print_json(payload)
+    elif args.format == "sarif":
+        _print_json(coverage_to_sarif(report, str(args.spec), below_threshold=below))
+    else:
+        print(format_coverage(report))
+        if below:
+            print(f"FAILED: overall coverage below --fail-under {args.fail_under}%")
+    if below:
+        return EXIT_VIOLATION
+    return EXIT_OK
+
+
+def cmd_drift(args) -> int:
+    from .drift import check_drift, drift_to_sarif, format_drift
+
+    spec = _load_spec_or_die(args.spec)
+    base = args.base
+    head = args.head
+    if args.range:
+        parts = args.range.split("..", 1)
+        if len(parts) != 2:
+            raise SpecError(f"invalid --range {args.range!r}: expected BASE..HEAD")
+        base, head = parts[0], parts[1]
+    if not base or not head:
+        raise SpecError("drift requires --base and --head, or --range BASE..HEAD")
+    report = check_drift(spec, base=base, head=head)
+    payload = {
+        "tool": "verispec",
+        "version": __version__,
+        "command": "drift",
+        "spec": _spec_payload(spec),
+        **report.to_dict(),
+    }
+    if args.format == "json":
+        _print_json(payload)
+    elif args.format == "sarif":
+        _print_json(drift_to_sarif(report, str(args.spec)))
+    else:
+        print(format_drift(report))
+    return EXIT_OK if report.ok else EXIT_VIOLATION
+
+
+def cmd_spec_strength(args) -> int:
+    from .spec_strength import run_spec_strength
+    from .trace import load_trace
+
+    spec = _load_spec_or_die(args.spec)
+    trace = load_trace(args.trace) if args.trace else None
+    report = run_spec_strength(
+        spec,
+        trace=trace,
+        walk_length=args.walk_length,
+        seed=args.seed,
+        max_mutants=args.max_mutants,
+    )
+    payload = {
+        "tool": "verispec",
+        "version": __version__,
+        "command": "spec-strength",
+        "spec": _spec_payload(spec),
+        **report.to_dict(),
+    }
+    if args.format == "json":
+        _print_json(payload)
+    else:
+        print(
+            f"base trace: {report.base_steps} action step(s); "
+            f"{report.caught} mutant(s) caught, {report.survived} survived"
+        )
+        if report.survived:
+            print("warning: surviving mutants suggest the spec may be too weak")
+        for m in report.mutants:
+            if not m.caught:
+                print(f"  SURVIVED  {m.mutant_id}: {m.description}")
+            elif args.verbose:
+                print(f"  caught    {m.mutant_id} ({m.failure_kind}): {m.description}")
+    if report.survived > 0:
+        return EXIT_VIOLATION
+    return EXIT_OK
+
+
 # --------------------------------------------------------------------------
 # parser
 # --------------------------------------------------------------------------
@@ -645,6 +817,12 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("spec")
     sp.add_argument("--bound", type=int, default=10, help="maximum number of steps")
     sp.add_argument("--invariant", help="only check this invariant")
+    sp.add_argument("--temporal", help="only check this temporal property (liveness)")
+    sp.add_argument(
+        "--skip-liveness",
+        action="store_true",
+        help="skip bounded liveness checking (safety invariants only)",
+    )
     sp.add_argument("--timeout", type=int, default=30000, help="solver timeout in ms")
     sp.add_argument(
         "--unbounded",
@@ -702,7 +880,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="python, typescript, javascript, go, rust, c, java",
     )
     sp.add_argument("-o", "--output", help="output file (default: stdout)")
-    sp.add_argument("--adapter", help="adapter import path (typescript/go) or module:Class (python)")
+    sp.add_argument(
+        "--adapter", help="adapter import path (typescript/go) or module:Class (python)"
+    )
     sp.add_argument("--package", default="verispec_conformance", help="Go package name")
     _add_format(sp)
     sp.set_defaults(func=cmd_gen_tests)
@@ -740,7 +920,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser("init", help="scaffold a spec from a template")
     sp.add_argument("directory", nargs="?", help="target directory (default: .)")
-    sp.add_argument("--template", required=True, help="ledger, idempotency, order, rate-limiter, queue")
+    sp.add_argument(
+        "--template", required=True, help="ledger, idempotency, order, rate-limiter, queue"
+    )
     sp.add_argument("--lang", default="python", choices=["python", "typescript", "go"])
     sp.add_argument("--name", help="name of the generated spec file")
     sp.add_argument("--force", action="store_true")
@@ -822,6 +1004,57 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--target", required=True, choices=["kani", "esbmc"])
     sp.add_argument("-o", "--output")
     sp.set_defaults(func=cmd_gen_harness)
+
+    sp = sub.add_parser(
+        "verify-loop",
+        help="escalating verification with tri-state checks (trace/fuzz, then Z3)",
+    )
+    sp.add_argument("spec")
+    sp.add_argument("--trace", help="optional JSON trace for cheap trace-monitor evidence")
+    sp.add_argument("--rounds", type=int, default=2, help="escalation rounds (default 2)")
+    sp.add_argument("--fuzz-bound", type=int, default=6, help="max steps per fuzz trial")
+    sp.add_argument("--fuzz-trials", type=int, default=40, help="fuzz trials per invariant")
+    sp.add_argument("--z3-bound", type=int, default=12, help="Z3 depth for unresolved checks")
+    sp.add_argument("--timeout", type=int, default=30000, help="Z3 timeout in ms")
+    sp.add_argument("--seed", type=int, default=0, help="RNG seed for fuzz walks")
+    _add_format(sp)
+    sp.set_defaults(func=cmd_verify_loop)
+
+    sp = sub.add_parser(
+        "spec-strength",
+        help="spec vacuity check via trace perturbations (mutation-style)",
+    )
+    sp.add_argument("spec")
+    sp.add_argument("--trace", help="known-good trace (default: random model walk)")
+    sp.add_argument(
+        "--walk-length", type=int, default=4, help="steps when synthesising a base trace"
+    )
+    sp.add_argument("--seed", type=int, default=0)
+    sp.add_argument("--max-mutants", type=int, help="limit number of mutants (for large traces)")
+    sp.add_argument("-v", "--verbose", action="store_true", help="list caught mutants too")
+    _add_format(sp)
+    sp.set_defaults(func=cmd_spec_strength)
+
+    sp = sub.add_parser("coverage", help="report spec coverage from traces and test events")
+    sp.add_argument("spec")
+    sp.add_argument("--trace", help="comma-separated JSON trace files")
+    sp.add_argument("--events", help="comma-separated coverage-events JSON files")
+    sp.add_argument(
+        "--fail-under",
+        type=float,
+        default=None,
+        help="fail when overall coverage percent is below this threshold (CI)",
+    )
+    _add_format(sp)
+    sp.set_defaults(func=cmd_coverage)
+
+    sp = sub.add_parser("drift", help="detect spec vs implementation drift in a git range")
+    sp.add_argument("spec")
+    sp.add_argument("--base", help="git ref for the old side")
+    sp.add_argument("--head", help="git ref for the new side")
+    sp.add_argument("--range", help="git range BASE..HEAD (alternative to --base/--head)")
+    _add_format(sp)
+    sp.set_defaults(func=cmd_drift)
 
     return p
 

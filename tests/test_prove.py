@@ -17,6 +17,7 @@ from verispec.prove import GUARANTEE_PROVED, prove  # noqa: E402
 BANK = ROOT / "examples" / "bank.yaml"
 BANK_BUGGY = ROOT / "examples" / "bank-buggy.yaml"
 NON_INDUCTIVE = ROOT / "tests" / "fixtures" / "non_inductive.yaml"
+TEMPORAL = ROOT / "tests" / "fixtures" / "temporal-fair.yaml"
 
 
 def spec(path):
@@ -27,6 +28,13 @@ def test_prove_bank():
     r = prove(spec(BANK), k=1, timeout_ms=60000)
     assert r["status"] == "ok", r
     assert r["guarantee"] == GUARANTEE_PROVED
+
+
+def test_prove_safety_only_when_spec_has_temporal():
+    r = prove(spec(TEMPORAL), k=1, precheck_bound=4, timeout_ms=60000)
+    assert r.get("safety_only") is True
+    assert r.get("temporal_scope") == "not-proved"
+    assert r.get("temporal_note")
 
 
 def test_prove_finds_real_violation_before_induction():

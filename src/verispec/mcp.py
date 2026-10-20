@@ -198,6 +198,12 @@ def _tool_verify(args: dict[str, Any]) -> tuple[str, bool]:
         from .bmc import check
 
         result = check(spec, bound=bound, invariant_filter=invariant)
+        if result.get("status") == "ok" and spec.temporal:
+            from .temporal import check_temporal_bounded, merge_check_with_liveness
+
+            result = merge_check_with_liveness(
+                result, check_temporal_bounded(spec, bound=bound, timeout_ms=30000)
+            )
     payload = _verification_payload(spec, result)
     if trace_path is not None:
         _attach_trace_check(spec, trace_path, payload)
@@ -251,7 +257,16 @@ def _verification_payload(spec: Spec, result: dict[str, Any]) -> dict[str, Any]:
             "Counterexample to induction: the listed states satisfy the invariants but the "
             "successor breaks one. Strengthen invariants or increase induction_k."
         )
-    for key in ("induction_k", "proof_method", "reason"):
+    if result.get("liveness"):
+        payload["liveness"] = result["liveness"]
+    for key in (
+        "induction_k",
+        "proof_method",
+        "reason",
+        "safety_only",
+        "temporal_scope",
+        "temporal_note",
+    ):
         if key in result:
             payload[key] = result[key]
     return payload

@@ -60,15 +60,17 @@ valid, `digest-match` when only the digest matches, and `digest-mismatch`,
 
 ### `proved`
 
-**It proves:** the spec invariants hold on every execution, for any number of
-steps. VeriSpec establishes this with *k-induction*: a bounded base case through
-depth *k−1*, then an inductive step showing that *k* consecutive states
-satisfying the invariants cannot be followed by a violating state.
+**It proves:** the spec **safety invariants** hold on every execution, for any
+number of steps. VeriSpec establishes this with *k-induction*: a bounded base
+case through depth *k−1*, then an inductive step showing that *k* consecutive
+states satisfying the invariants cannot be followed by a violating state.
 
-**It does not prove:** anything about a particular implementation (the proof is
-over the *spec* transition system, like bounded checking). It also does not
-apply when the inductive step fails to close: then the guarantee is `unknown`
-and the tool may report a *counterexample to induction* (states that satisfy the
+**It does not prove:** temporal liveness properties (`temporal` / `eventually` /
+`leads_to`); use `verispec check` for bounded liveness (`bounded-liveness-proved(k)`).
+It does not prove anything about a particular implementation (the proof is over
+the *spec* transition system, like bounded checking). It also does not apply
+when the inductive step fails to close: then the guarantee is `unknown` and the
+tool may report a *counterexample to induction* (states that satisfy the
 invariants but whose successor does not). That CTI is a hint to strengthen
 invariants, not a runtime bug.
 

@@ -32,6 +32,20 @@ __all__ = ["prove", "format_result", "GUARANTEE_PROVED"]
 
 GUARANTEE_PROVED = "proved"
 
+_TEMPORAL_NOTE = (
+    "Safety invariants only: temporal liveness properties in the spec are not proved "
+    "(use `verispec check` for bounded liveness)."
+)
+
+
+def _with_safety_scope(spec: Spec, result: dict[str, Any]) -> dict[str, Any]:
+    result = dict(result)
+    result["safety_only"] = True
+    if spec.temporal:
+        result["temporal_scope"] = "not-proved"
+        result["temporal_note"] = _TEMPORAL_NOTE
+    return result
+
 
 def prove(
     spec: Spec,
@@ -97,16 +111,19 @@ def prove(
     step["proof_method"] = "induction"
     step["induction_k"] = k
     if step["status"] == "ok":
-        return {
-            "status": "ok",
-            "guarantee": GUARANTEE_PROVED,
-            "induction_k": k,
-            "proof_method": "induction",
-            "message": (
-                f"invariants proved for all depths by {k}-induction "
-                f"(base case through bound {k - 1}, inductive step closed)"
-            ),
-        }
+        return _with_safety_scope(
+            spec,
+            {
+                "status": "ok",
+                "guarantee": GUARANTEE_PROVED,
+                "induction_k": k,
+                "proof_method": "induction",
+                "message": (
+                    f"safety invariants proved for all depths by {k}-induction "
+                    f"(base case through bound {k - 1}, inductive step closed)"
+                ),
+            },
+        )
     if step["status"] == "violation":
         return {
             "status": "unknown",
@@ -299,10 +316,15 @@ def _prove_spacer(
 def format_result(spec: Spec, result: dict[str, Any]) -> str:
     """Human-readable rendering of a prove result."""
     if result["status"] == "ok" and result.get("guarantee") == GUARANTEE_PROVED:
-        return (
-            f"{result['message']}  (unbounded guarantee: {GUARANTEE_PROVED}; "
-            f"k={result.get('induction_k', 1)})"
-        )
+        lines = [
+            (
+                f"{result['message']}  (unbounded safety guarantee: {GUARANTEE_PROVED}; "
+                f"k={result.get('induction_k', 1)})"
+            )
+        ]
+        if result.get("temporal_note"):
+            lines.append(f"  {result['temporal_note']}")
+        return "\n".join(lines)
     if result["status"] == "violation":
         from .bmc import format_result as bmc_format
 

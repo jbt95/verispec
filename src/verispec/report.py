@@ -17,8 +17,15 @@ __all__ = ["render_report", "render_counterexample", "report_json", "GUARANTEE_L
 
 GUARANTEE_LEGEND = {
     "proved": (
-        "Invariants were proved for all execution depths (unbounded), "
-        "typically via k-induction."
+        "Safety invariants were proved for all execution depths (unbounded), "
+        "typically via k-induction. Temporal liveness is not included."
+    ),
+    "bounded-liveness-proved(k)": (
+        "No liveness counterexample (lasso) up to the bound. "
+        "This is a bounded claim, not a proof for all depths."
+    ),
+    "pending-obligation": (
+        "The trace conformed but a temporal property is not yet satisfied at trace end."
     ),
     "bounded-proved(k)": (
         "No invariant was violated in any execution up to the bound. "

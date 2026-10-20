@@ -61,8 +61,10 @@ to HTML when `--format` is omitted.
 | Label | Meaning |
 | --- | --- |
 | `bounded-proved(k)` | No invariant violated in any execution up to depth *k* (not a full proof) |
-| `proved` | Invariants proved for all depths (k-induction; unbounded) |
+| `proved` | Safety invariants proved for all depths (k-induction; temporal liveness excluded) |
+| `bounded-liveness-proved(k)` | No liveness counterexample (lasso) up to depth *k* (not a full proof) |
 | `conformance-tested` | Recorded trace replayed and every step conformed |
+| `pending-obligation` | Trace conforms but a temporal property is not yet satisfied at trace end |
 | `violation-found` | Concrete counterexample |
 | `unknown` | Solver or checker could not decide |
 
@@ -106,11 +108,21 @@ verispec check examples/bank.yaml --bound 8 --timeout 30000 --format json
 | `--invariant` | — | Only search violations of this invariant name |
 | `--timeout` | `30000` | Z3 timeout (ms) |
 | `--format` | `text` | `text`, `json`, or `sarif` |
+| `--skip-liveness` | off | Safety invariants only (skip temporal liveness) |
+| `--temporal` | — | Only check this named temporal property |
+| `--unbounded` | off | Run k-induction (`prove`) instead of bounded BMC |
+| `--induction-k` | `1` | k for `--unbounded` |
+| `--proof-method` | `induction` | `induction` or experimental `spacer` with `--unbounded` |
+
+When the spec declares `temporal` properties, `check` also runs **bounded
+liveness** (lasso-shaped counterexamples) after safety, unless
+`--skip-liveness`. Guarantees may include `bounded-liveness-proved(k)`.
+`--unbounded` proves **safety invariants only** and does not run liveness.
 
 On violation, text output includes step-by-step state, action, params, and
 which invariant broke.
 
-### `prove` — unbounded invariant proof (k-induction)
+### `prove` — unbounded safety invariant proof (k-induction)
 
 ```bash
 verispec prove examples/bank.yaml
@@ -126,8 +138,10 @@ verispec check examples/bank.yaml --unbounded --induction-k 1
 | `--timeout` | `30000` | Z3 timeout (ms) |
 | `--method` | `induction` | `induction` or experimental `spacer` |
 
-Success uses guarantee `proved`. If the inductive step fails, status is
-`unknown` with a counterexample-to-induction trace when the solver finds one.
+Success uses guarantee `proved` (safety only). Temporal properties are not
+proved; use `verispec check` for bounded liveness. If the inductive step fails,
+status is `unknown` with a counterexample-to-induction trace when the solver
+finds one.
 
 ### `check-trace` — replay an implementation trace
 
@@ -335,3 +349,53 @@ verispec spec-strength examples/bank.yaml --walk-length 4 --seed 0 -v
 | `--format` | `text` | `text`, `json`, or `sarif` |
 
 Exit `1` if any mutant **survived** (spec may be too weak).
+
+### `coverage` — spec coverage from traces and test events
+
+Reports which actions, guard branches (`requires`), invariants, and parameter
+boundaries were exercised.  Traces mark successful guard paths; optional
+coverage-events JSON can record rejected guards from property tests.
+
+```bash
+verispec coverage examples/bank.yaml --trace examples/traces/bank-valid.json
+verispec coverage examples/bank.yaml --trace a.json,b.json --events run.json --format json
+verispec coverage examples/bank.yaml --trace traces.json --fail-under 80
+```
+
+| Flag | Default | Role |
+| --- | --- | --- |
+| `--trace` | — | Comma-separated JSON trace files |
+| `--events` | — | Comma-separated coverage-events JSON files |
+| `--fail-under` | — | Exit `1` when overall coverage % is below this value |
+| `--format` | `text` | `text`, `json`, or `sarif` |
+
+Action `implements` mappings are not required for coverage.
+
+### `drift` — spec vs implementation drift in git
+
+Each action may declare where its implementation lives:
+
+```yaml
+actions:
+  - name: transfer
+    implements:
+      - path: src/transfer.py
+      - glob: "pkg/**/adapter*.go"
+```
+
+Given a git range, flags implementation changes without a spec/signature digest
+change, and the reverse.
+
+```bash
+verispec drift examples/bank.yaml --base main --head HEAD
+verispec drift svc.yaml --range origin/main..HEAD --format sarif
+```
+
+| Flag | Role |
+| --- | --- |
+| `--base` / `--head` | Git refs to compare |
+| `--range` | `BASE..HEAD` (alternative to `--base`/`--head`) |
+| `--format` | `text`, `json`, or `sarif` |
+
+Exit `1` when drift findings are present. The GitHub Action exposes this as
+optional input `drift-check: true`.

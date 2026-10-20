@@ -13,7 +13,7 @@
 # A suite that stays green on the broken adapter is not testing anything.
 
 CC ?= cc
-CFLAGS ?= -std=c11 -Wall -Wextra -O1
+CFLAGS ?= -std=c11 -Wall -Wextra -O1 -D_POSIX_C_SOURCE=200809L
 INCLUDES := -Iinclude
 BUILD := build
 
