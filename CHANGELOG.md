@@ -5,6 +5,18 @@ All notable changes to VeriSpec are documented here. The project follows
 format has its own version, carried by the `spec_version` field (see
 [`GOVERNANCE.md`](GOVERNANCE.md)).
 
+## [Unreleased]
+
+### Spec format
+
+- **Added** optional `concurrency.actors` with per-actor action programs (RFC-0002).
+- **Added** optional `actor` field on JSON trace steps when a spec declares actors.
+
+### CLI
+
+- **Added** `verispec check-concurrent` to explore actor interleavings up to a
+  step bound with partial-order reduction.
+
 ## [1.0.0] - 2026-10-19
 
 The first open source release of the library and the CLI. The v0.1 proof of

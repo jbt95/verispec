@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from .expr import SpecError, eval_python
+from .concurrency import actor_ids
 from .model import Spec, check_invariants, initial_state
 from .types import MapType, SeqType, SetType
 from .values import json_to_value, state_from_json, value_to_json
@@ -63,6 +64,7 @@ def check_trace_data(spec: Spec, trace: list[dict[str, Any]]) -> dict[str, Any]:
     if any(not isinstance(step, dict) for step in trace):
         return _fail(None, "invalid-trace", "trace steps must be JSON objects")
     types = spec.types
+    known_actors = actor_ids(spec)
     init, error = _evaluate_initial_state(spec)
     if error:
         return _fail(None, "evaluation-error", f"cannot evaluate initial state: {error}")
@@ -112,6 +114,22 @@ def check_trace_data(spec: Spec, trace: list[dict[str, Any]]) -> dict[str, Any]:
             return _fail(i - 1, "invalid-state", str(e))
         action = step.get("action")
         params = step.get("params", {})
+        actor = step.get("actor")
+        if actor is not None and not isinstance(actor, str):
+            return _fail(i, "invalid-actor", f"step {i}: actor must be a string")
+        if known_actors:
+            if actor is None:
+                return _fail(
+                    i,
+                    "missing-actor",
+                    f"step {i}: missing actor (spec declares concurrency actors)",
+                )
+            if actor not in known_actors:
+                return _fail(
+                    i,
+                    "unknown-actor",
+                    f"step {i}: unknown actor {actor!r} (known: {sorted(known_actors)})",
+                )
         if not isinstance(action, str) or not action:
             return _fail(i, "missing-action", f"step {i}: missing or invalid action")
         if not isinstance(params, dict):

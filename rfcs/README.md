@@ -129,6 +129,7 @@ Open questions for the maintainers and the community. Be specific.
 | RFC | Title | Status | Summary |
 | --- | --- | --- | --- |
 | [RFC-0001](0001-bounded-collections.md) | Bounded collections, records and modules | IMPLEMENTED | The v1 format adds bounded maps, sets and sequences, records, and a module system, all with finite domains so the Z3 encoding stays total. |
+| [RFC-0002](0002-concurrency-actors.md) | Concurrent actors and interleaving exploration | ACCEPTED | Optional `concurrency.actors` programs, `check-concurrent`, trace `actor` field, partial-order reduction. |
 
 ## Relationship with ADRs
 
