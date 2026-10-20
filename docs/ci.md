@@ -164,6 +164,29 @@ Use the composite Action above, or add an equivalent reviewed gate, when your
 repository requires human approval for contract changes. The CLI exit codes
 and JSON/SARIF formats are stable interfaces for other pipeline systems.
 
+## GitLab CI, Jenkins, and Azure Pipelines
+
+Ready-made templates live under `ci/` in the repository. They mirror the CLI
+steps from [Using the CLI directly](#using-the-cli-directly): validate, lint,
+bounded `check`, optional trace replay, and an HTML audit report artifact.
+
+| File | Platform |
+| --- | --- |
+| [`ci/gitlab-verispec.yml`](../ci/gitlab-verispec.yml) | GitLab CI |
+| [`ci/jenkins-verispec.Jenkinsfile`](../ci/jenkins-verispec.Jenkinsfile) | Jenkins |
+| [`ci/azure-pipelines-verispec.yml`](../ci/azure-pipelines-verispec.yml) | Azure Pipelines |
+
+Set `VERISPEC_SPEC` to your entry spec (for example `specs/bank.verispec.yaml`).
+Optionally set `VERISPEC_TRACES` to a comma-separated list of JSON traces and
+`VERISPEC_BOUND` / `VERISPEC_TIMEOUT_MS` for the solver.
+
+Install VeriSpec from PyPI or pin a git ref in the template install step. These
+pipelines do **not** implement the GitHub Action’s PR approval gate; add your
+own review process for contract changes.
+
+Publish the `verispec-report.html` artifact for compliance reviewers, or run
+`verispec report <spec> --format pdf` when the optional PDF extra is installed.
+
 ## Human approval for spec changes
 
 **The spec is human owned.** A pull request that changes the contract should

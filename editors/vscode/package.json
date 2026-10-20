@@ -85,6 +85,11 @@
           "type": "boolean",
           "default": true,
           "description": "Run a bounded check when a VeriSpec spec is opened or saved and publish results as inline diagnostics."
+        },
+        "verispec.languageServer": {
+          "type": "boolean",
+          "default": true,
+          "description": "Start the VeriSpec language server (validate/lint diagnostics, hover, go-to-definition). Requires pip install 'verispec[lsp]'."
         }
       }
     },
@@ -172,6 +177,9 @@
     "lint": "eslint src --ext ts",
     "test": "echo \"no tests\" && exit 0",
     "package": "vsce package"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
