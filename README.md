@@ -64,6 +64,12 @@ verispec check examples/bank-buggy.yaml --bound 10
 That is the whole demo: a spec, a broken implementation, and the exact
 sequence of two transfers that breaks the contract.
 
+For concurrent clients, declare actors in the spec and run interleaving search:
+
+```bash
+verispec check-concurrent examples/bank-concurrent-race.yaml --bound 6
+```
+
 ## Start from a template
 
 ```bash
@@ -230,7 +236,7 @@ were exercised by traces (and optional test-event recordings), with
 `implements` mappings and warns when code and contract move independently. The
 GitHub Action accepts `drift-check: true` for PR annotations.
 
-**Refinement checking** ([RFC-0003](rfcs/0003-refinement-mapping.md)): a concrete spec
+**Refinement checking** ([RFC-0004](rfcs/0004-refinement-mapping.md)): a concrete spec
 can declare `refines:` with a state abstraction and per-action simulation (or
 stutter). `verispec refines` checks bounded refinement against the abstract spec
 and reports counterexamples at both levels (`examples/bank-concrete-pending.yaml`
