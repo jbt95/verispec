@@ -43,6 +43,10 @@ def serve() -> int:
             "vars": {n: str(v.type) for n, v in spec.vars.items()},
             "actions": [{"name": a.name, "params": list(a.params.keys())} for a in spec.actions],
             "invariants": list(spec.invariants),
+            "temporal": [
+                {"name": p.name, "kind": p.kind, "goal": p.goal, "when": p.when}
+                for p in spec.temporal
+            ],
         }
 
     def _publish(ls: LanguageServer, uri: str, path: str, text: str | None) -> None:

@@ -50,6 +50,13 @@ inputs:
     description: "Label that marks a spec change as approved by a human"
     required: false
     default: "spec-approved"
+  drift-check:
+    description: >-
+      On pull requests, run verispec drift between base and head and annotate
+      the PR when implementation and spec mappings diverge (requires action
+      `implements` entries in the spec).
+    required: false
+    default: "false"
 
 outputs:
   result:
@@ -229,6 +236,40 @@ runs:
           exit "$code"
         fi
         exit 0
+
+    - name: Check spec vs implementation drift
+      if: ${{ inputs.drift-check == 'true' && github.event_name == 'pull_request' }}
+      shell: bash
+      env:
+        SPEC: ${{ inputs.spec }}
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      run: |
+        set -euo pipefail
+        if ! git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+        fi
+        set +e
+        verispec drift "$SPEC" --base "$BASE_SHA" --head "$HEAD_SHA" --format text
+        code=$?
+        set -e
+        verispec drift "$SPEC" --base "$BASE_SHA" --head "$HEAD_SHA" --format sarif \
+          > "$RUNNER_TEMP/verispec/drift.sarif" || true
+        if [ "$code" -ne 0 ]; then
+          echo "::warning::VeriSpec drift check reported spec/implementation mismatch (exit $code)"
+          if [ -s "$RUNNER_TEMP/verispec/drift.sarif" ]; then
+            python - <<'PY'
+        import json, os
+        path = os.path.join(os.environ["RUNNER_TEMP"], "verispec/drift.sarif")
+        data = json.load(open(path))
+        for run in data.get("runs") or []:
+            for result in run.get("results") or []:
+                msg = result.get("message", {}).get("text", "drift")
+                print(f"::warning title=VeriSpec drift::{msg}")
+        PY
+          fi
+          exit "$code"
+        fi
 
     - name: Check the traces
       if: ${{ inputs.traces != '' }}

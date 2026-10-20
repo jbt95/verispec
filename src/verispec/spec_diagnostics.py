@@ -29,6 +29,18 @@ def collect_spec_diagnostics(path: str, text: str | None = None) -> list[Diagnos
         out.append(_diag(0, 0, str(e), "error", "missing-file"))
         return out
 
+    if spec.temporal and not spec.fairness.weak and not spec.fairness.strong:
+        out.append(
+            _diag(
+                0,
+                0,
+                "temporal properties are declared but fairness is empty; liveness checks may be vacuous",
+                "warning",
+                "temporal-no-fairness",
+                severity=2,
+            )
+        )
+
     lint = lint_spec(spec)
     for f in lint.get("findings") or []:
         level = f.get("level", "warning")
@@ -67,7 +79,7 @@ def _read(path: str) -> str:
 
 def _locate(index: SpecSourceIndex, where: str, code: str) -> tuple[int, int]:
     if where:
-        sym = index.lookup(where, ("var", "action", "invariant"))
+        sym = index.lookup(where, ("var", "action", "invariant", "temporal"))
         if sym:
             return sym.line, sym.column
     if code == "no-invariants":

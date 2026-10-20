@@ -129,6 +129,7 @@ Open questions for the maintainers and the community. Be specific.
 | RFC | Title | Status | Summary |
 | --- | --- | --- | --- |
 | [RFC-0001](0001-bounded-collections.md) | Bounded collections, records and modules | IMPLEMENTED | The v1 format adds bounded maps, sets and sequences, records, and a module system, all with finite domains so the Z3 encoding stays total. |
+| [RFC-0002](0002-temporal-liveness.md) | Temporal properties and fairness | OPEN | `eventually` and `leads_to` properties, weak/strong fairness on actions, bounded lasso liveness checking, TLA+ export, and pending obligations on finite traces. |
 
 ## Relationship with ADRs
 

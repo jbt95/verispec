@@ -1,18 +1,37 @@
 # Changelog
 
-## [Unreleased]
-
-### Adoption tooling
-
-- **Added** `verispec lsp` (optional `lsp` extra): validate/lint diagnostics, hover, and go-to-definition.
-- **Added** VS Code language client wiring in `editors/vscode`.
-- **Added** CI templates for GitLab, Jenkins, and Azure Pipelines under `ci/`.
-- **Extended** `verispec report` with audit HTML/JSON and optional PDF (`pdf` extra).
-
 All notable changes to VeriSpec are documented here. The project follows
 [semantic versioning](https://semver.org/) for the package, and the spec
 format has its own version, carried by the `spec_version` field (see
 [`GOVERNANCE.md`](GOVERNANCE.md)).
+
+## [Unreleased]
+
+### Spec format
+
+- **Added** optional `fairness` (weak/strong action lists) and `temporal`
+  properties (`eventually`, `leads_to`) per [RFC-0002](rfcs/0002-temporal-liveness.md).
+  Existing specs without these fields are unchanged.
+
+### CLI
+
+- **Added** bounded liveness checking to `verispec check` (lasso counterexamples),
+  with `--skip-liveness` and `--temporal <name>`.
+- **Added** pending temporal obligations at trace end in `verispec check-trace`.
+- **Extended** `export-tla` with temporal formulas and fairness conjuncts.
+- **Added** `verispec coverage`: report exercised actions, guards, invariants,
+  and parameter boundaries from traces and optional coverage-events JSON, with
+  `--fail-under` for CI and SARIF output.
+- **Added** `verispec drift`: compare a git range against per-action
+  `implements` mappings and flag spec/digest vs implementation mismatches.
+- **Added** GitHub Action input `drift-check` to annotate pull requests when
+  drift is detected.
+- **Added** `verispec lsp` (optional `lsp` extra): validate/lint diagnostics,
+  hover, and go-to-definition.
+- **Added** VS Code language client wiring in `editors/vscode`.
+- **Added** CI templates for GitLab, Jenkins, and Azure Pipelines under `ci/`.
+- **Extended** `verispec report` with compliance audit HTML/JSON and optional
+  PDF (`pdf` extra), including bounded liveness and trace coverage when run.
 
 ## [1.0.0] - 2026-10-19
 

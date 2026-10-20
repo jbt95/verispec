@@ -85,6 +85,12 @@ def index_spec_text(text: str, path: str = "<spec>") -> SpecSourceIndex:
         if re.match(r"^invariants\s*:", stripped):
             section = "invariants"
             continue
+        if re.match(r"^temporal\s*:", stripped):
+            section = "temporal"
+            continue
+        if re.match(r"^fairness\s*:", stripped):
+            section = "fairness"
+            continue
         if re.match(r"^imports\s*:", stripped):
             section = "imports"
             continue
@@ -123,6 +129,17 @@ def index_spec_text(text: str, path: str = "<spec>") -> SpecSourceIndex:
                 name = inline.group(1)
                 col = line.index(name)
                 symbols.append(Symbol("invariant", name, i, col))
+
+        if section == "temporal":
+            m = re.match(r"^\s*-\s*name\s*:\s*([A-Za-z_][A-Za-z0-9_]*)", line)
+            if m:
+                col = line.index(m.group(1))
+                symbols.append(Symbol("temporal", m.group(1), i, col))
+            inline = re.search(r"name\s*:\s*([A-Za-z_][A-Za-z0-9_]*)", line)
+            if inline and stripped.startswith("-") and not m:
+                name = inline.group(1)
+                col = line.index(name)
+                symbols.append(Symbol("temporal", name, i, col))
 
         if section == "imports":
             alias = None
@@ -224,6 +241,13 @@ def hover_for_symbol(sym: Symbol, spec_summary: dict[str, Any] | None) -> str:
             for inv in spec_summary.get("invariants", []):
                 if inv.get("name") == sym.name:
                     parts.append(f"expr: `{inv.get('expr', '')}`")
+                    break
+        if sym.kind == "temporal":
+            for prop in spec_summary.get("temporal", []):
+                if prop.get("name") == sym.name:
+                    parts.append(f"kind: `{prop.get('kind', '')}` goal: `{prop.get('goal', '')}`")
+                    if prop.get("when"):
+                        parts.append(f"when: `{prop.get('when')}`")
                     break
         if sym.kind in ("import", "import_ref", "import_path") and sym.target_path:
             parts.append(f"resolved: `{sym.target_path}`")

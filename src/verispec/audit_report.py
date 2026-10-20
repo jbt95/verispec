@@ -9,10 +9,17 @@ from typing import Any
 
 from . import __version__
 from .bmc import check
+from .coverage import collect_coverage, overall_percent
 from .deps import build_lock
 from .model import Spec
 from .report import GUARANTEE_LEGEND, _badge, _esc, _page
 from .sign import default_signature_path, spec_digest, verify_signature
+from .temporal import (
+    GUARANTEE_BOUNDED_LIVENESS,
+    GUARANTEE_PENDING,
+    check_temporal_bounded,
+    merge_check_with_liveness,
+)
 from .trace import check_trace
 
 __all__ = [
@@ -28,23 +35,37 @@ def collect_audit_results(
     *,
     bound: int = 10,
     invariant_filter: str | None = None,
+    temporal_filter: str | None = None,
+    skip_liveness: bool = False,
     trace_path: str | Path | None = None,
+    events_paths: list[str | Path] | None = None,
     timeout_ms: int = 30000,
 ) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
     bmc = check(spec, bound=bound, invariant_filter=invariant_filter, timeout_ms=timeout_ms)
-    results.append(
-        {
-            "check": "check",
-            "status": bmc["status"],
-            "guarantee": bmc.get("guarantee"),
-            "bound": bmc.get("bound"),
-            "message": bmc.get("message"),
-            "violations": bmc.get("violations", []),
-            "violated": bmc.get("violated", []),
-            "trace": bmc.get("trace", []),
-        }
-    )
+    if not skip_liveness and spec.temporal and bmc.get("status") == "ok":
+        liveness = check_temporal_bounded(
+            spec,
+            bound=bound,
+            property_filter=temporal_filter,
+            timeout_ms=timeout_ms,
+        )
+        bmc = merge_check_with_liveness(bmc, liveness)
+    check_row: dict[str, Any] = {
+        "check": "check",
+        "status": bmc["status"],
+        "guarantee": bmc.get("guarantee"),
+        "bound": bmc.get("bound"),
+        "message": bmc.get("message"),
+        "violations": bmc.get("violations", []),
+        "violated": bmc.get("violated", []),
+        "trace": bmc.get("trace", []),
+    }
+    if bmc.get("liveness"):
+        check_row["liveness"] = bmc["liveness"]
+    if bmc.get("lasso"):
+        check_row["lasso"] = bmc["lasso"]
+    results.append(check_row)
     if trace_path:
         tres = check_trace(spec, str(trace_path))
         results.append(
@@ -56,6 +77,21 @@ def collect_audit_results(
                 "message": tres.get("message"),
                 "violations": [],
                 "trace": [],
+                "temporal": tres.get("temporal"),
+            }
+        )
+        traces = [str(trace_path)]
+        events = [str(p) for p in (events_paths or [])]
+        cov = collect_coverage(spec, traces=traces, events_paths=events or None)
+        pct = overall_percent(cov)
+        results.append(
+            {
+                "check": "coverage",
+                "status": "ok",
+                "guarantee": "conformance-tested",
+                "bound": "-",
+                "message": f"overall trace coverage {pct:.1f}%",
+                "coverage": cov.to_dict(),
             }
         )
     sig_path = default_signature_path(spec.path)
@@ -80,6 +116,21 @@ def build_audit_payload(
 ) -> dict[str, Any]:
     lock = build_lock(spec)
     counterexamples = [r for r in results if r.get("status") == "violation" and r.get("trace")]
+    legend = {
+        **GUARANTEE_LEGEND,
+        GUARANTEE_BOUNDED_LIVENESS: (
+            "No temporal obligation was violated within a lasso up to the bound "
+            "(bounded liveness, not a full proof)."
+        ),
+        GUARANTEE_PENDING: "A temporal obligation was still pending at trace end.",
+    }
+    temporal = [
+        {"name": p.name, "kind": p.kind, "goal": p.goal, "when": p.when} for p in spec.temporal
+    ]
+    fairness = {
+        "weak": list(spec.fairness.weak),
+        "strong": list(spec.fairness.strong),
+    }
     return {
         "tool": "verispec",
         "version": __version__,
@@ -91,12 +142,14 @@ def build_audit_payload(
             "vars": list(spec.vars),
             "actions": [a.name for a in spec.actions],
             "invariants": [i["name"] for i in spec.invariants],
+            "temporal": temporal,
+            "fairness": fairness,
         },
         "dependencies": lock.get("dependencies", []),
         "lock_version": lock.get("lock_version"),
         "results": results,
         "counterexamples": counterexamples,
-        "guarantee_legend": GUARANTEE_LEGEND,
+        "guarantee_legend": legend,
     }
 
 
@@ -144,6 +197,24 @@ def render_audit_html(spec: Spec, results: list[dict[str, Any]]) -> str:
         f"<tr><td><code>{_esc(i['name'])}</code></td><td><code>{_esc(i['expr'])}</code></td></tr>"
         for i in spec.invariants
     )
+    temp_rows = (
+        "".join(
+            f"<tr><td><code>{_esc(p.name)}</code></td><td>{_esc(p.kind)}</td>"
+            f"<td><code>{_esc(p.goal)}</code></td>"
+            f"<td><code>{_esc(p.when or '-')}</code></td></tr>"
+            for p in spec.temporal
+        )
+        or "<tr><td colspan='4' class='muted'>none</td></tr>"
+    )
+    cov_block = ""
+    for r in results:
+        if r.get("check") == "coverage" and r.get("coverage"):
+            summary = r["coverage"].get("summary") or {}
+            cov_block = (
+                "<h2>Trace coverage</h2><section>"
+                f"<p class='muted'>Overall {_esc(summary.get('overall_percent', '-'))}%</p></section>"
+            )
+            break
     body = f"""
 <h1>{_esc(spec.name)} &mdash; audit report</h1>
 <p class="lead">Conformance summary for reviewers: specs, guarantees, signatures, counterexamples, and versions.</p>
@@ -172,6 +243,9 @@ def render_audit_html(spec: Spec, results: list[dict[str, Any]]) -> str:
 </section>
 <h2>Invariants</h2>
 <section><table><thead><tr><th>Name</th><th>Expression</th></tr></thead><tbody>{inv_rows}</tbody></table></section>
+<h2>Temporal properties</h2>
+<section><table><thead><tr><th>Name</th><th>Kind</th><th>Goal</th><th>When</th></tr></thead><tbody>{temp_rows}</tbody></table></section>
+{cov_block}
 {"".join(ce_sections)}
 <footer>Generated by VeriSpec {html.escape(__version__)} &middot; no telemetry &middot; Apache-2.0</footer>
 """

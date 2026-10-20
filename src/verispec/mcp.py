@@ -171,6 +171,12 @@ def _tool_verify(args: dict[str, Any]) -> tuple[str, bool]:
     from .bmc import check
 
     result = check(spec, bound=bound, invariant_filter=invariant)
+    if result.get("status") == "ok" and spec.temporal:
+        from .temporal import check_temporal_bounded, merge_check_with_liveness
+
+        result = merge_check_with_liveness(
+            result, check_temporal_bounded(spec, bound=bound, timeout_ms=30000)
+        )
     payload = _verification_payload(spec, result)
     if trace_path is not None:
         _attach_trace_check(spec, trace_path, payload)
