@@ -215,10 +215,17 @@ may be too weak). Caught mutants get a typed failure label (`missing_step`,
 verispec spec-strength examples/bank.yaml --trace examples/traces/bank-valid.json
 ```
 
-**Refinement checking** (RFC-0002): a concrete spec can declare `refines:` with a
-state abstraction and per-action simulation (or stutter). `verispec refines` checks
-bounded refinement against the abstract spec and reports counterexamples at both
-levels (`examples/bank-concrete-pending.yaml` refines `examples/bank.yaml`).
+**Coverage and drift.** `verispec coverage` summarises which parts of the spec
+were exercised by traces (and optional test-event recordings), with
+`--fail-under` for CI. `verispec drift` compares a git range to per-action
+`implements` mappings and warns when code and contract move independently. The
+GitHub Action accepts `drift-check: true` for PR annotations.
+
+**Refinement checking** ([RFC-0003](rfcs/0003-refinement-mapping.md)): a concrete spec
+can declare `refines:` with a state abstraction and per-action simulation (or
+stutter). `verispec refines` checks bounded refinement against the abstract spec
+and reports counterexamples at both levels (`examples/bank-concrete-pending.yaml`
+refines `examples/bank.yaml`).
 
 ```bash
 verispec refines examples/bank-concrete-pending.yaml --bound 10

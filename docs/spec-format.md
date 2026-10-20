@@ -105,6 +105,8 @@ invariants:
 | `init` | mapping | no | Initial values. Missing variables get their type default. |
 | `actions` | list | no | The transitions. Names must be unique. |
 | `invariants` | list | no | Properties that must hold in every reachable state. |
+| `fairness` | mapping | no | Weak and/or strong fairness assumptions on named actions (see [Temporal properties and fairness](#temporal-properties-and-fairness)). |
+| `temporal` | list | no | Liveness properties (`eventually`, `leads_to`) checked by bounded lasso search and finite traces. |
 
 Unknown top-level keys are ignored, so a spec can carry comments-as-data
 without breaking the loader.
@@ -432,11 +434,59 @@ Names must be unique. A bare string is also accepted and is used as both the
 name and the expression.
 
 Invariants are checked in every state of every explored run, including the
-initial state. They are the *only* thing the bounded model checker looks for,
-together with the capacity bounds of collections (see below).
+initial state. The bounded model checker also enforces collection capacity
+bounds (see below). Optional **temporal** properties are checked separately as
+bounded liveness (see [Temporal properties and fairness](#temporal-properties-and-fairness)).
 
 `verispec lint` reports specs whose invariants can never fail, because a
 tautology is worse than no invariant: it looks like evidence and is not.
+
+## Temporal properties and fairness
+
+Safety invariants must hold in **every** state. **Temporal** properties describe
+progress: something good must **eventually** happen, or a condition must
+**lead to** a goal. They use the same expression language as invariants.
+
+```yaml
+fairness:
+  weak: [complete]
+  strong: []
+
+temporal:
+  - name: eventually_done
+    kind: eventually
+    goal: 'phase == "done"'
+  - name: pending_implies_done
+    kind: leads_to
+    when: 'phase == "pending"'
+    goal: 'phase == "done"'
+```
+
+| `kind` | Meaning |
+| --- | --- |
+| `eventually` | Along every fair infinite run, `goal` holds at some step. |
+| `leads_to` | Whenever `when` holds, `goal` holds eventually after (always (`when` → eventually `goal`)). |
+
+`fairness.weak` lists actions with **weak fairness** (`WF`): on a lasso
+counterexample cycle, if an action stays enabled on every transition in the
+cycle, it must be taken at least once in that cycle (bounded approximation).
+`fairness.strong` uses a similar **strong fairness** (`SF`) rule: if the action
+is enabled on any transition in the cycle, it must be taken in the cycle.
+
+### Checking
+
+- `verispec check` runs safety BMC, then **bounded liveness** (lasso-shaped
+  counterexamples) unless `--skip-liveness` is set. Use `--temporal <name>` to
+  focus on one property. Guarantees: `bounded-liveness-proved(k)` alongside
+  `bounded-proved(k)` for safety.
+- `verispec check-trace` reports **pending** obligations when a finite trace
+  conforms to actions and invariants but has not yet satisfied a temporal
+  property at the last step (`guarantee: pending-obligation`).
+- `verispec export-tla` adds temporal formulas, fairness definitions, and
+  extends `Spec` with fairness conjuncts.
+
+Specs without `fairness` or `temporal` are unchanged. See
+[RFC-0002](../rfcs/0002-temporal-liveness.md).
 
 ## The expression language
 

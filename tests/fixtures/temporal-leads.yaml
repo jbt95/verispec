@@ -1,0 +1,24 @@
+spec_version: "1.0"
+name: TemporalLeads
+vars:
+  flag: {type: bool}
+  done: {type: bool}
+init:
+  flag: false
+  done: false
+actions:
+  - name: arm
+    requires: ["not flag"]
+    effects:
+      flag: true
+  - name: finish
+    requires: ["flag", "not done"]
+    effects:
+      done: true
+invariants:
+  - {name: ok, expr: "true"}
+temporal:
+  - name: arm_leads_done
+    kind: leads_to
+    when: "flag"
+    goal: "done"

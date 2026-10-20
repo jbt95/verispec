@@ -1,9 +1,9 @@
-# RFC-0002: Refinement mapping between specs
+# RFC-0003: Refinement mapping between specs
 
 - Status: ACCEPTED
 - Date: 2026-10-20
 - Author: VeriSpec maintainers
-- Related: `verispec refines`, `src/verispec/refinement.py`
+- Related: RFC-0002 (temporal liveness, independent), `verispec refines`, `src/verispec/refinement.py`
 
 ## Summary
 
