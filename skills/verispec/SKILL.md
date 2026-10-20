@@ -272,9 +272,6 @@ See `docs/agent-integration.md` for full tool schemas and agent loop patterns.
 
 ## Escalating verification (`verify-loop`, `spec-strength`)
 
-> **Requires a build that includes PR #1+** (not on stock `main` until merged). If
-> `verispec verify-loop` is unknown, use `check` + `check-trace` instead.
-
 ### `verify-loop` — tri-state checks with cheap-then-Z3 escalation
 
 Runs trace monitor and bounded random walks first, then Z3 for unresolved
