@@ -421,9 +421,10 @@ Exit `1` if any mutant **survived** (spec may be too weak).
 
 ### `refines` — bounded refinement vs. an abstract spec
 
-The **concrete** YAML carries a `refines:` block (state abstraction + per-action
-simulation or stutter). Checks that every concrete behaviour maps to allowed
-abstract behaviour and that abstract invariants hold on the coupled state.
+The **concrete** YAML carries a `refines:` block ([RFC-0004](../rfcs/0004-refinement-mapping.md):
+state abstraction + per-action simulation or stutter). Checks that every concrete
+behaviour maps to allowed abstract behaviour and that abstract invariants hold on
+the coupled state.
 
 ```bash
 verispec refines examples/bank-concrete-pending.yaml

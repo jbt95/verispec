@@ -107,6 +107,7 @@ invariants:
 | `invariants` | list | no | Properties that must hold in every reachable state. |
 | `fairness` | mapping | no | Weak and/or strong fairness assumptions on named actions (see [Temporal properties and fairness](#temporal-properties-and-fairness)). |
 | `temporal` | list | no | Liveness properties (`eventually`, `leads_to`) checked by bounded lasso search and finite traces. |
+| `refines` | mapping | no | On a **concrete** spec only: refinement map to an abstract spec (see [Refinement mapping](#refinement-mapping)). |
 
 Unknown top-level keys are ignored, so a spec can carry comments-as-data
 without breaking the loader.
@@ -487,6 +488,46 @@ is enabled on any transition in the cycle, it must be taken in the cycle.
 
 Specs without `fairness` or `temporal` are unchanged. See
 [RFC-0002](../rfcs/0002-temporal-liveness.md).
+
+## Refinement mapping
+
+A concrete (implementation-level) spec may declare that it **refines** an
+abstract (business-level) spec. The `refines` block lives on the concrete file
+only; the abstract spec is unchanged.
+
+```yaml
+refines:
+  spec: bank.yaml
+  state:
+    balance_a: "balance_a + pending_a"
+    balance_b: "balance_b + pending_b"
+  actions:
+    initiate_transfer:
+      stutter: true
+    complete_transfer:
+      abstract: transfer_a_to_b
+      params:
+        amount: amount
+```
+
+| Field | Meaning |
+| --- | --- |
+| `spec` | Path to the abstract YAML (relative to the concrete file). |
+| `state` | Abstract variable name → expression over **concrete** state variables. |
+| `actions.<concrete>` | Either `{stutter: true}` or `{abstract: <name>, params?: {...}}`. |
+
+### Checking
+
+- `verispec refines <concrete.yaml> [abstract.yaml]` runs bounded Z3 refinement
+  checking. When `abstract.yaml` is omitted, `refines.spec` is used.
+- Counterexamples include **concrete** and **abstract** traces. Guarantee:
+  `bounded-refinement-proved(k)` when no violation is found within depth *k*.
+- `verispec export-tla` prepends a comment documenting the map when `refines:` is
+  present.
+
+Scalar state abstraction only (maps/sets/records in `refines.state` are not
+supported yet). Worked example: `examples/bank-concrete-pending.yaml` refines
+`examples/bank.yaml`. See [RFC-0004](../rfcs/0004-refinement-mapping.md).
 
 ## The expression language
 
