@@ -16,7 +16,7 @@ import z3
 from .bmc import _binding, _decode_trace, _encode_init, _slot, _unchanged
 from .expr import SpecError, Z3Binding, to_z3, z3_sort_for
 from .model import Spec, load_spec
-from .types import EnumType, MapType, RecordType, SeqType, SetType
+from .types import EnumType, RecordType
 from .values import value_to_json
 
 __all__ = [
@@ -50,9 +50,7 @@ def resolve_abstract_spec(concrete: Spec, mapping: RefinementMapping) -> Spec:
     base = Path(concrete.path).parent if concrete.path not in ("<spec>", "") else Path(".")
     ap = (base / mapping.abstract_path).resolve()
     if not ap.exists():
-        raise SpecError(
-            f"refines.spec {mapping.abstract_path!r} not found (resolved to {ap})"
-        )
+        raise SpecError(f"refines.spec {mapping.abstract_path!r} not found (resolved to {ap})")
     return load_spec(ap)
 
 
@@ -120,9 +118,7 @@ def load_refinement_mapping(concrete: Spec) -> RefinementMapping:
     )
 
 
-def _validate_mapping_types(
-    concrete: Spec, abstract: Spec, mapping: RefinementMapping
-) -> None:
+def _validate_mapping_types(concrete: Spec, abstract: Spec, mapping: RefinementMapping) -> None:
     from .model import _check_assignable  # noqa: PLC2701
 
     for an, expr in mapping.state_exprs.items():
@@ -365,7 +361,9 @@ def _check_mapped_invariant_violation(
     """Search for a concrete trace whose abstraction breaks an abstract invariant."""
     solver = z3.Solver()
     solver.set("timeout", timeout_ms)
-    conc_states = [{n: _slot(concrete, v, t) for n, v in concrete.vars.items()} for t in range(bound + 1)]
+    conc_states = [
+        {n: _slot(concrete, v, t) for n, v in concrete.vars.items()} for t in range(bound + 1)
+    ]
     for st in conc_states:
         for n, v in concrete.vars.items():
             if isinstance(v.type, EnumType):
@@ -382,10 +380,6 @@ def _check_mapped_invariant_violation(
         return None
     model = solver.model()
     concrete_trace = _decode_trace(concrete, model, conc_states, bound, choices, params)
-    abs_states = [
-        {n: _slot(abstract, v, (bound + 1) * 2000 + t) for n, v in abstract.vars.items()}
-        for t in range(bound + 1)
-    ]
     abstract_trace = []
     for entry in concrete_trace:
         step = entry["step"]
@@ -396,7 +390,13 @@ def _check_mapped_invariant_violation(
             an: eval_python(mapping.state_exprs[an], c_state, concrete.types)
             for an in mapping.state_exprs
         }
-        abstract_trace.append({"step": step, "state": a_state, **{k: v for k, v in entry.items() if k not in ("step", "state")}})
+        abstract_trace.append(
+            {
+                "step": step,
+                "state": a_state,
+                **{k: v for k, v in entry.items() if k not in ("step", "state")},
+            }
+        )
     violations = _classify_violation(concrete, abstract, mapping, concrete_trace, abstract_trace)
     return {
         "status": "violation",
@@ -433,10 +433,7 @@ def _check_one(
     for t in range(bound + 1):
         conc_states.append({n: _slot(concrete, v, t) for n, v in concrete.vars.items()})
         abs_states.append(
-            {
-                n: _slot(abstract, v, (bound + 1) * 1000 + t)
-                for n, v in abstract.vars.items()
-            }
+            {n: _slot(abstract, v, (bound + 1) * 1000 + t) for n, v in abstract.vars.items()}
         )
 
     for spec, states in ((concrete, conc_states), (abstract, abs_states)):
@@ -450,9 +447,7 @@ def _check_one(
     _encode_init(solver, concrete, conc_states)
     _encode_init(solver, abstract, abs_states)
 
-    conc_choices, conc_params = _encode_transitions(
-        concrete, solver, conc_states, bound, "conc"
-    )
+    conc_choices, conc_params = _encode_transitions(concrete, solver, conc_states, bound, "conc")
 
     conc_index = {a.name: i for i, a in enumerate(concrete.actions)}
 
@@ -601,11 +596,17 @@ def _check_one(
     model = solver.model()
     concrete_trace = _decode_trace(concrete, model, conc_states, bound, conc_choices, conc_params)
     abstract_trace = _decode_abstract_trace(
-        concrete, abstract, mapping, model, conc_states, abs_states, bound, conc_choices, conc_params
+        concrete,
+        abstract,
+        mapping,
+        model,
+        conc_states,
+        abs_states,
+        bound,
+        conc_choices,
+        conc_params,
     )
-    violations = _classify_violation(
-        concrete, abstract, mapping, concrete_trace, abstract_trace
-    )
+    violations = _classify_violation(concrete, abstract, mapping, concrete_trace, abstract_trace)
     return {
         "status": "violation",
         "bound": bound,
@@ -655,43 +656,22 @@ def _decode_abstract_trace(
                     assert ar.abstract_action is not None
                     aa = abstract.action(ar.abstract_action)
                     ca = concrete.action(cname)
-                    conc_bindings = {
-                        n: _binding(v, conc_states[t][n]) for n, v in concrete.vars.items()
-                    }
+                    from .expr import eval_python
+
+                    c_state = _decode_state(concrete, model, conc_states[t])
                     penv = conc_params[t][ch]
-                    conc_env = {
-                        **conc_bindings,
-                        **{pn: Z3Binding(penv[pn], ca.params[pn].type) for pn in ca.params},
-                    }
+                    param_env = dict(c_state)
+                    for pn in ca.params:
+                        param_env[pn] = _decode_scalar(
+                            ca.params[pn].type,
+                            model.eval(penv[pn], model_completion=True),
+                        )
                     params: dict[str, Any] = {}
                     for pn, pv in aa.params.items():
                         if pn in ar.param_exprs:
-                            from .expr import eval_python
-
-                            params[pn] = eval_python(
-                                ar.param_exprs[pn],
-                                {
-                                    n: _decode_scalar(
-                                        concrete.vars[n].type,
-                                        model.eval(
-                                            conc_bindings[n].value, model_completion=True
-                                        ),
-                                    )
-                                    for n in concrete.vars
-                                }
-                                | {
-                                    pn: _decode_scalar(
-                                        ca.params[pn].type,
-                                        model.eval(penv[pn], model_completion=True),
-                                    )
-                                    for pn in ca.params
-                                },
-                                concrete.types,
-                            )
+                            params[pn] = eval_python(ar.param_exprs[pn], param_env, concrete.types)
                         elif pn in ca.params:
-                            params[pn] = _decode_scalar(
-                                pv.type, model.eval(penv[pn], model_completion=True)
-                            )
+                            params[pn] = param_env[pn]
                     entry["action"] = ar.abstract_action
                     entry["params"] = params
         trace.append(entry)
@@ -818,31 +798,23 @@ def check_refinement(
 
 def format_refinement_result(result: dict[str, Any]) -> str:
     if result["status"] == "ok":
-        return (
-            f"{result['message']}  (bounded claim only; guarantee: {result.get('guarantee')})"
-        )
+        return f"{result['message']}  (bounded claim only; guarantee: {result.get('guarantee')})"
     if result["status"] != "violation":
         return f"{result['message']}  (guarantee: {result.get('guarantee', 'unknown')})"
     lines = [result["message"]]
     for entry in result.get("concrete_trace", []):
         lines.append(f"  concrete step {entry['step']}: state={entry['state']}")
         if "action" in entry:
-            lines.append(
-                f"    -> {entry['action']} params={entry.get('params', {})}"
-            )
+            lines.append(f"    -> {entry['action']} params={entry.get('params', {})}")
     for entry in result.get("abstract_trace", []):
         lines.append(f"  abstract step {entry['step']}: state={entry['state']}")
         if "action" in entry:
-            lines.append(
-                f"    -> {entry['action']} params={entry.get('params', {})}"
-            )
+            lines.append(f"    -> {entry['action']} params={entry.get('params', {})}")
     for v in result.get("violations", []):
         lines.append(
             f"  violated at step {v['step']}: {v['name']} ({v['kind']}) {v.get('expr', '')}"
         )
-    lines.append(
-        "  Fix the concrete model or the refinement map; do not weaken the abstract spec."
-    )
+    lines.append("  Fix the concrete model or the refinement map; do not weaken the abstract spec.")
     return "\n".join(lines)
 
 
