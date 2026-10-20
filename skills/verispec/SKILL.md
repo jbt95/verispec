@@ -269,3 +269,49 @@ See `docs/agent-integration.md` for full tool schemas and agent loop patterns.
 ## Further reading
 
 - `README.md`, `docs/feature-tour.md`, `docs/ci.md`, `docs/adapter-authoring.md`
+
+## Escalating verification (`verify-loop`, `spec-strength`)
+
+### `verify-loop` — tri-state checks with cheap-then-Z3 escalation
+
+Runs trace monitor and bounded random walks first, then Z3 for unresolved
+invariants. Stops at the first violation. Default **2 rounds**.
+
+```bash
+verispec verify-loop examples/bank.yaml --trace examples/traces/bank-valid.json
+verispec verify-loop examples/bank-buggy.yaml --rounds 2 --z3-bound 12 --format json
+```
+
+| Flag | Default | Role |
+| --- | --- | --- |
+| `--trace` | — | JSON trace for cheap trace-monitor evidence |
+| `--rounds` | `2` | Escalation rounds |
+| `--fuzz-bound` | `6` | Max steps per fuzz trial |
+| `--fuzz-trials` | `40` | Fuzz trials per invariant |
+| `--z3-bound` | `12` | Z3 depth for unresolved checks |
+| `--timeout` | `30000` | Z3 timeout (ms) |
+| `--seed` | `0` | RNG seed for fuzz walks |
+| `--format` | `text` | `text`, `json`, or `sarif` |
+
+Exit `0` only when verdict is `success`. `failure` or `uncertain` → exit `1`.
+
+### `spec-strength` — spec vacuity via trace perturbations
+
+Mutates a known-good trace (omit step, swap steps, replace action) and reports
+mutants the spec still accepts (**survived** = possibly too weak).
+
+```bash
+verispec spec-strength examples/bank.yaml --trace examples/traces/bank-valid.json
+verispec spec-strength examples/bank.yaml --walk-length 4 --seed 0 -v
+```
+
+| Flag | Default | Role |
+| --- | --- | --- |
+| `--trace` | — | Known-good trace (else random model walk) |
+| `--walk-length` | `4` | Steps when synthesising a base trace |
+| `--seed` | `0` | RNG seed |
+| `--max-mutants` | — | Cap number of mutants |
+| `-v` / `--verbose` | off | Also list caught mutants |
+| `--format` | `text` | `text`, `json`, or `sarif` |
+
+Exit `1` if any mutant **survived** (spec may be too weak).
