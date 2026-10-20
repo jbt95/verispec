@@ -5,6 +5,18 @@ All notable changes to VeriSpec are documented here. The project follows
 format has its own version, carried by the `spec_version` field (see
 [`GOVERNANCE.md`](GOVERNANCE.md)).
 
+## Unreleased
+
+### CLI
+
+- **Added** `verispec coverage`: report exercised actions, guards, invariants,
+  and parameter boundaries from traces and optional coverage-events JSON, with
+  `--fail-under` for CI and SARIF output.
+- **Added** `verispec drift`: compare a git range against per-action
+  `implements` mappings and flag spec/digest vs implementation mismatches.
+- **Added** GitHub Action input `drift-check` to annotate pull requests when
+  drift is detected.
+
 ## [1.0.0] - 2026-10-19
 
 The first open source release of the library and the CLI. The v0.1 proof of
