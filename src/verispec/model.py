@@ -612,8 +612,11 @@ def _rename_expr(expr: str, mapping: dict[str, str]) -> str:
 def load_spec(path: str | Path) -> Spec:
     """Load and validate a spec from a YAML file."""
     p = Path(path)
-    with open(p) as f:
-        data = yaml.safe_load(f)
+    try:
+        with open(p) as f:
+            data = yaml.safe_load(f)
+    except yaml.YAMLError as error:
+        raise SpecError(f"{p}: invalid YAML: {error}") from error
     if data is None:
         raise SpecError(f"{p}: empty spec file")
     return load_spec_data(data, str(p))
