@@ -1,18 +1,40 @@
 # Changelog
 
-## Unreleased
-
-- **Added** enterprise repository governance: `.verispec/policy.yaml` and
-  `verispec policy check` with JSON and SARIF output for CI.
-- **Added** optional keyless Sigstore signing on `verispec sign --sigstore`
-  (cosign CLI) alongside existing GPG digest signing.
-- **Added** CycloneDX SBOM and build provenance attestations to the release
-  workflow; verification steps documented in `SECURITY.md`.
-
 All notable changes to VeriSpec are documented here. The project follows
 [semantic versioning](https://semver.org/) for the package, and the spec
 format has its own version, carried by the `spec_version` field (see
 [`GOVERNANCE.md`](GOVERNANCE.md)).
+
+## [Unreleased]
+
+### Spec format
+
+- **Added** optional `fairness` (weak/strong action lists) and `temporal`
+  properties (`eventually`, `leads_to`) per [RFC-0002](rfcs/0002-temporal-liveness.md).
+  Existing specs without these fields are unchanged.
+
+### CLI
+
+- **Added** bounded liveness checking to `verispec check` (lasso counterexamples),
+  with `--skip-liveness` and `--temporal <name>`.
+- **Added** pending temporal obligations at trace end in `verispec check-trace`.
+- **Extended** `export-tla` with temporal formulas and fairness conjuncts.
+- **Added** `verispec coverage`: report exercised actions, guards, invariants,
+  and parameter boundaries from traces and optional coverage-events JSON, with
+  `--fail-under` for CI and SARIF output.
+- **Added** `verispec drift`: compare a git range against per-action
+  `implements` mappings and flag spec/digest vs implementation mismatches.
+- **Added** GitHub Action input `drift-check` to annotate pull requests when
+  drift is detected.
+- **Added** enterprise repository governance: `.verispec/policy.yaml` and
+  `verispec policy check` with JSON and SARIF output for CI.
+- **Added** optional keyless Sigstore signing on `verispec sign --sigstore`
+  (cosign CLI) alongside existing GPG digest signing.
+
+### Release / supply chain
+
+- **Added** CycloneDX SBOM and build provenance attestations to the release
+  workflow; verification steps documented in `SECURITY.md`.
 
 ## [1.0.0] - 2026-10-19
 

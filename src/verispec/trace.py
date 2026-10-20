@@ -150,6 +150,24 @@ def check_trace_data(spec: Spec, trace: list[dict[str, Any]]) -> dict[str, Any]:
                 expected=value_to_json(types, expected),
                 got=value_to_json(types, state),
             )
+    from .temporal import check_temporal_on_trace
+
+    temporal = check_temporal_on_trace(spec, trace)
+    if temporal.get("status") == "pending":
+        return {
+            "ok": False,
+            "status": "pending",
+            "message": f"trace conforms but {temporal['message']}",
+            "steps": len(trace),
+            "failed_step": len(trace) - 1,
+            "reason": "pending-temporal",
+            "detail": temporal["message"],
+            "expected": None,
+            "got": None,
+            "violated": [p["name"] for p in temporal.get("pending", [])],
+            "temporal": temporal,
+            "guarantee": temporal.get("guarantee"),
+        }
     return {
         "ok": True,
         "status": "ok",
@@ -161,6 +179,7 @@ def check_trace_data(spec: Spec, trace: list[dict[str, Any]]) -> dict[str, Any]:
         "expected": None,
         "got": None,
         "violated": [],
+        "temporal": temporal if spec.temporal else None,
         "guarantee": GUARANTEE_CONFORMANCE,
     }
 
