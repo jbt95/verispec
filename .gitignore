@@ -19,6 +19,8 @@ adapters/c/*.o
 adapters/c/*.a
 
 # Node
+bench/.scale-cache/
+
 node_modules/
 editors/vscode/out/
 editors/vscode/*.vsix

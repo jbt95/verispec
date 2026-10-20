@@ -134,25 +134,24 @@ def cmd_lint(args) -> int:
 
 def cmd_check(args) -> int:
     from .bmc import check, format_result
+    from .check_config import config_from_namespace, resolve_cache_dir
     from .sarif import to_sarif
-    from .temporal import check_temporal_bounded, merge_check_with_liveness
+    from .scaled_check import apply_liveness, run_bounded_check
 
     spec = _load_spec_or_die(args.spec)
+    config = config_from_namespace(args)
+    cache_dir = resolve_cache_dir(args)
     started = time.monotonic()
-    result = check(
-        spec,
-        bound=args.bound,
-        invariant_filter=args.invariant,
-        timeout_ms=args.timeout,
-    )
-    if not args.skip_liveness and spec.temporal and result.get("status") == "ok":
-        liveness = check_temporal_bounded(
+    if cache_dir or config.needs_subprocess() or config.parallel_invariants:
+        result = run_bounded_check(
             spec,
-            bound=args.bound,
-            property_filter=args.temporal,
-            timeout_ms=args.timeout,
+            config,
+            cache_dir=cache_dir,
+            use_cache=cache_dir is not None,
         )
-        result = merge_check_with_liveness(result, liveness)
+    else:
+        result = check(spec, **config.to_bmc_kwargs())
+        result = apply_liveness(spec, config, result)
     result["duration_ms"] = int((time.monotonic() - started) * 1000)
     payload = _check_payload(spec, result)
     if result.get("liveness"):
@@ -170,6 +169,40 @@ def cmd_check(args) -> int:
 
             print(format_liveness_result(spec, result["liveness"]))
     return EXIT_OK if result["status"] == "ok" else EXIT_VIOLATION
+
+
+def cmd_check_suite(args) -> int:
+    from .check_config import config_from_namespace, resolve_cache_dir
+    from .scaled_check import run_check_suite
+
+    config = config_from_namespace(args)
+    cache_dir = resolve_cache_dir(args)
+    suite = run_check_suite(
+        args.specs,
+        config,
+        jobs=max(1, args.jobs),
+        cache_dir=cache_dir,
+    )
+    if args.format == "json":
+        _print_json(
+            {
+                "tool": "verispec",
+                "version": __version__,
+                "command": "check-suite",
+                **suite,
+            }
+        )
+    else:
+        for row in suite["results"]:
+            result = row["result"]
+            status = result.get("status", "unknown")
+            cached = " cached" if result.get("from_cache") else ""
+            print(f"{status:<10} {row['spec_name']:<20} {row['spec_path']}{cached}")
+        print(
+            f"{suite['specs']} spec(s), {suite['failures']} failure(s), "
+            f"{suite['cache_hits']} cache hit(s)"
+        )
+    return EXIT_OK if suite["ok"] else EXIT_VIOLATION
 
 
 def cmd_check_trace(args) -> int:
@@ -775,6 +808,22 @@ def _add_format(p, default: str = "text") -> None:
     p.add_argument("--format", choices=FORMATS, default=default, help="output format")
 
 
+def _add_check_scale_args(p) -> None:
+    p.add_argument(
+        "--cache-dir",
+        help="store incremental check results here (or set VERISPEC_CACHE_DIR)",
+    )
+    p.add_argument("--no-cache", action="store_true", help="do not read or write the check cache")
+    p.add_argument("--wall-timeout", type=int, help="wall-clock limit for the whole check in ms")
+    p.add_argument("--memory-mb", type=int, help="memory cap for the checker process in MiB")
+    p.add_argument("--solver-memory-mb", type=int, help="Z3 solver max_memory in MiB")
+    p.add_argument(
+        "--parallel-invariants",
+        action="store_true",
+        help="check each invariant in a separate worker (single spec only)",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     from .policy import DEFAULT_POLICY_PATH
 
@@ -814,8 +863,25 @@ def build_parser() -> argparse.ArgumentParser:
         help="skip bounded liveness checking (safety invariants only)",
     )
     sp.add_argument("--timeout", type=int, default=30000, help="solver timeout in ms")
+    _add_check_scale_args(sp)
     _add_format(sp)
     sp.set_defaults(func=cmd_check)
+
+    sp = sub.add_parser("check-suite", help="bounded model check many specs (parallel, cached)")
+    sp.add_argument("specs", nargs="+", help="spec YAML paths")
+    sp.add_argument("--bound", type=int, default=10, help="maximum number of steps")
+    sp.add_argument("--invariant", help="only check this invariant on every spec")
+    sp.add_argument("--temporal", help="only check this temporal property (liveness)")
+    sp.add_argument(
+        "--skip-liveness",
+        action="store_true",
+        help="skip bounded liveness checking (safety invariants only)",
+    )
+    sp.add_argument("--timeout", type=int, default=30000, help="solver timeout in ms")
+    sp.add_argument("--jobs", type=int, default=1, help="parallel workers across specs")
+    _add_check_scale_args(sp)
+    _add_format(sp)
+    sp.set_defaults(func=cmd_check_suite)
 
     sp = sub.add_parser("check-trace", help="check that a real implementation follows the spec")
     sp.add_argument("spec")

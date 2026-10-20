@@ -202,6 +202,7 @@ def check(
     bound: int = 10,
     invariant_filter: str | None = None,
     timeout_ms: int = 30000,
+    solver_memory_mb: int | None = None,
 ) -> dict[str, Any]:
     """Search for a state that violates an invariant, up to `bound` steps.
 
@@ -209,7 +210,12 @@ def check(
     which a violation exists is the bound at which it is reported.
     """
     return _check_after_preflight(
-        spec, bound, invariant_filter, timeout_ms, _preflight(spec, bound, timeout_ms)
+        spec,
+        bound,
+        invariant_filter,
+        timeout_ms,
+        solver_memory_mb,
+        _preflight(spec, bound, timeout_ms),
     )
 
 
@@ -218,12 +224,19 @@ def _check_after_preflight(
     bound: int,
     invariant_filter: str | None,
     timeout_ms: int,
+    solver_memory_mb: int | None,
     preflight: dict[str, Any] | None,
 ) -> dict[str, Any]:
     if preflight:
         return preflight
     for k in range(0, bound + 1):
-        r = _check_one(spec, bound=k, invariant_filter=invariant_filter, timeout_ms=timeout_ms)
+        r = _check_one(
+            spec,
+            bound=k,
+            invariant_filter=invariant_filter,
+            timeout_ms=timeout_ms,
+            solver_memory_mb=solver_memory_mb,
+        )
         if r["status"] == "violation":
             r["max_bound"] = bound
             return r
@@ -331,12 +344,15 @@ def _check_one(
     bound: int = 10,
     invariant_filter: str | None = None,
     timeout_ms: int = 30000,
+    solver_memory_mb: int | None = None,
 ) -> dict[str, Any]:
     invs = [i for i in spec.invariants if not invariant_filter or i["name"] == invariant_filter]
     if invariant_filter and not invs:
         raise SpecError(f"invariant {invariant_filter!r} not found")
     solver = z3.Solver()
     solver.set("timeout", timeout_ms)
+    if solver_memory_mb is not None:
+        solver.set("max_memory", solver_memory_mb)
 
     states: list[dict[str, Any]] = []
     for t in range(bound + 1):
