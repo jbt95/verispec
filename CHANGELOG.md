@@ -7,6 +7,13 @@ format has its own version, carried by the `spec_version` field (see
 
 ## [Unreleased]
 
+### Runtime conformance
+
+- **Added** `verispec observe-runtime`: map OTLP JSON exports, NDJSON structured
+  logs, or a local OTLP/HTTP JSON receiver into VeriSpec trace steps via a
+  declarative mapping file, with optional streaming JSON lines and violation
+  webhooks.  See `docs/runtime-observe.md` and `examples/runtime-observe/`.
+
 ### Spec format
 
 - **Added** optional `fairness` (weak/strong action lists) and `temporal`
@@ -30,6 +37,10 @@ format has its own version, carried by the `spec_version` field (see
   `implements` mappings and flag spec/digest vs implementation mismatches.
 - **Added** GitHub Action input `drift-check` to annotate pull requests when
   drift is detected.
+- **Added** incremental check cache (`--cache-dir`, `VERISPEC_CACHE_DIR`,
+  `--no-cache`), `check-suite` with `--jobs`, resource limits
+  (`--wall-timeout`, `--memory-mb`, `--solver-memory-mb`), and
+  `--parallel-invariants` for large spec suites.
 - **Added** enterprise repository governance: `.verispec/policy.yaml` and
   `verispec policy check` with JSON and SARIF output for CI.
 - **Added** optional keyless Sigstore signing on `verispec sign --sigstore`

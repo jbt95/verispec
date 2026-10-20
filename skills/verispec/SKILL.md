@@ -109,6 +109,12 @@ verispec check examples/bank.yaml --bound 8 --timeout 30000 --format json
 | `--format` | `text` | `text`, `json`, or `sarif` |
 | `--skip-liveness` | off | Safety invariants only (skip temporal liveness) |
 | `--temporal` | — | Only check this named temporal property |
+| `--cache-dir` | — | Incremental result cache (or set `VERISPEC_CACHE_DIR`) |
+| `--no-cache` | off | Skip reading/writing the check cache |
+| `--wall-timeout` | — | Wall-clock cap for the whole check (ms); yields `unknown` |
+| `--memory-mb` | — | Process memory cap (MiB); yields `unknown` if exceeded |
+| `--solver-memory-mb` | — | Z3 `max_memory` (MiB) |
+| `--parallel-invariants` | off | Check each invariant in a separate worker (one spec) |
 
 When the spec declares `temporal` properties, `check` also runs **bounded
 liveness** (lasso-shaped counterexamples) after safety, unless
@@ -116,6 +122,22 @@ liveness** (lasso-shaped counterexamples) after safety, unless
 
 On violation, text output includes step-by-step state, action, params, and
 which invariant broke.
+
+### `check-suite` — many specs (cache + parallelism)
+
+```bash
+verispec check-suite examples/bank.yaml examples/ledger.yaml --bound 8 --jobs 4
+verispec check-suite corpus/*/spec.yaml --bound 4 --cache-dir .verispec-cache --format json
+```
+
+| Flag | Default | Role |
+| --- | --- | --- |
+| `--jobs` | `1` | Parallel workers across specs (output order stays deterministic) |
+| (scale flags) | — | Same cache, timeout, and memory flags as `check` |
+
+Cache keys include the resolved spec digest (imports included), checker options
+(including `--skip-liveness` and `--temporal`), and the VeriSpec version.
+Unchanged entries are skipped on reruns.
 
 ### `check-trace` — replay an implementation trace
 
@@ -235,6 +257,25 @@ Exit `1` if traces diverge.
 verispec monitor traces/live.json --spec examples/bank.yaml
 verispec monitor traces/live.json --spec examples/bank.yaml --follow --interval 1.0
 ```
+
+### `observe-runtime` — OTLP / logs → trace steps (streaming)
+
+Map OpenTelemetry spans or structured JSON logs to VeriSpec steps with a YAML
+mapping file; checks conformance online.  Local by default (optional `--webhook`).
+
+```bash
+verispec observe-runtime --spec examples/bank.yaml \
+  --mapping examples/runtime-observe/bank-mapping.yaml \
+  --input examples/runtime-observe/bank-otlp.json
+
+cat examples/runtime-observe/bank-logs.ndjson | verispec observe-runtime \
+  --spec examples/bank.yaml --mapping examples/runtime-observe/bank-mapping.yaml --stdin
+
+verispec observe-runtime --spec examples/bank.yaml \
+  --mapping examples/runtime-observe/bank-mapping.yaml --listen 127.0.0.1:4318 --stream
+```
+
+See `docs/runtime-observe.md`.
 
 ### `corpus` — run conformance fixtures
 
