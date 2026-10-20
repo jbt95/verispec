@@ -135,25 +135,24 @@ def cmd_lint(args) -> int:
 
 def cmd_check(args) -> int:
     from .bmc import check, format_result
+    from .check_config import config_from_namespace, resolve_cache_dir
     from .sarif import to_sarif
-    from .temporal import check_temporal_bounded, merge_check_with_liveness
+    from .scaled_check import apply_liveness, run_bounded_check
 
     spec = _load_spec_or_die(args.spec)
+    config = config_from_namespace(args)
+    cache_dir = resolve_cache_dir(args)
     started = time.monotonic()
-    result = check(
-        spec,
-        bound=args.bound,
-        invariant_filter=args.invariant,
-        timeout_ms=args.timeout,
-    )
-    if not args.skip_liveness and spec.temporal and result.get("status") == "ok":
-        liveness = check_temporal_bounded(
+    if cache_dir or config.needs_subprocess() or config.parallel_invariants:
+        result = run_bounded_check(
             spec,
-            bound=args.bound,
-            property_filter=args.temporal,
-            timeout_ms=args.timeout,
+            config,
+            cache_dir=cache_dir,
+            use_cache=cache_dir is not None,
         )
-        result = merge_check_with_liveness(result, liveness)
+    else:
+        result = check(spec, **config.to_bmc_kwargs())
+        result = apply_liveness(spec, config, result)
     result["duration_ms"] = int((time.monotonic() - started) * 1000)
     payload = _check_payload(spec, result)
     if result.get("liveness"):
@@ -171,6 +170,40 @@ def cmd_check(args) -> int:
 
             print(format_liveness_result(spec, result["liveness"]))
     return EXIT_OK if result["status"] == "ok" else EXIT_VIOLATION
+
+
+def cmd_check_suite(args) -> int:
+    from .check_config import config_from_namespace, resolve_cache_dir
+    from .scaled_check import run_check_suite
+
+    config = config_from_namespace(args)
+    cache_dir = resolve_cache_dir(args)
+    suite = run_check_suite(
+        args.specs,
+        config,
+        jobs=max(1, args.jobs),
+        cache_dir=cache_dir,
+    )
+    if args.format == "json":
+        _print_json(
+            {
+                "tool": "verispec",
+                "version": __version__,
+                "command": "check-suite",
+                **suite,
+            }
+        )
+    else:
+        for row in suite["results"]:
+            result = row["result"]
+            status = result.get("status", "unknown")
+            cached = " cached" if result.get("from_cache") else ""
+            print(f"{status:<10} {row['spec_name']:<20} {row['spec_path']}{cached}")
+        print(
+            f"{suite['specs']} spec(s), {suite['failures']} failure(s), "
+            f"{suite['cache_hits']} cache hit(s)"
+        )
+    return EXIT_OK if suite["ok"] else EXIT_VIOLATION
 
 
 def cmd_check_trace(args) -> int:
@@ -406,6 +439,9 @@ def cmd_sign(args) -> int:
         note=args.note or "",
         use_gpg=args.gpg,
         gpg_key=args.gpg_key,
+        use_sigstore=args.sigstore,
+        sigstore_identity=args.sigstore_identity,
+        sigstore_issuer=args.sigstore_issuer,
     )
     if args.format == "json":
         _print_json(
@@ -422,9 +458,47 @@ def cmd_sign(args) -> int:
         print(f"signature written to {path}")
         if args.gpg:
             print("  GPG signature attached")
+        elif args.sigstore:
+            print("  Sigstore signature attached")
         else:
             print("  No cryptographic signature: the approver is a recorded claim.")
     return EXIT_OK
+
+
+def cmd_policy_check(args) -> int:
+    from .policy import DEFAULT_POLICY_PATH, run_policy_check
+    from .policy_sarif import policy_to_sarif
+
+    policy_path = Path(args.policy) if args.policy else DEFAULT_POLICY_PATH
+    try:
+        report = run_policy_check(policy_path, repo_root=args.repo_root)
+    except SpecError as error:
+        if args.format == "json":
+            _print_json(
+                {
+                    "tool": "verispec",
+                    "command": "policy-check",
+                    "status": "spec-error",
+                    "message": str(error),
+                }
+            )
+        else:
+            print(f"ERROR: {error}")
+        return EXIT_SPEC_ERROR
+
+    if args.format == "json":
+        _print_json(report)
+    elif args.format == "sarif":
+        _print_json(policy_to_sarif(report))
+    else:
+        if report["ok"]:
+            print(f"OK: policy satisfied ({report['policy']['entries']} entries)")
+        else:
+            print(f"FAILED: {report['errors']} policy error(s)")
+        for finding in report["findings"]:
+            where = f" [{finding['path']}]" if finding.get("path") else ""
+            print(f"{finding['level'].upper()}: {finding['code']}{where}: {finding['message']}")
+    return EXIT_OK if report["ok"] else EXIT_VIOLATION
 
 
 def cmd_verify_signature(args) -> int:
@@ -632,6 +706,92 @@ def cmd_verify_loop(args) -> int:
     return EXIT_OK
 
 
+def cmd_observe_runtime(args) -> int:
+    import threading
+
+    from .runtime_observe import (
+        iter_ndjson_lines,
+        load_mapping,
+        load_otlp_json,
+        run_batch,
+        run_stream,
+        serve_otlp_http,
+    )
+
+    spec = _load_spec_or_die(args.spec)
+    mapping = load_mapping(args.mapping)
+    stream_mode = args.stream or args.stdin or args.listen is not None
+
+    if args.listen:
+        shutdown = threading.Event()
+        result_holder: dict[str, Any] = {"ok": True, "status": "listening"}
+
+        def on_events(events: list) -> None:
+            nonlocal result_holder
+            summary = run_stream(
+                spec,
+                mapping,
+                events,
+                stream=stream_mode,
+                webhook=args.webhook,
+                webhook_timeout=args.webhook_timeout,
+                stop_on_violation=not args.continue_on_violation,
+            )
+            result_holder = summary
+            if not summary.get("ok") and not args.continue_on_violation:
+                shutdown.set()
+
+        host, port_s = args.listen.rsplit(":", 1)
+        port = int(port_s)
+        serve_otlp_http(host, port, on_events, shutdown_event=shutdown)
+        if args.format == "json" and not stream_mode:
+            _print_json({"tool": "verispec", "command": "observe-runtime", **result_holder})
+        return EXIT_OK if result_holder.get("ok") else EXIT_VIOLATION
+
+    events = []
+    if args.stdin:
+        events = list(iter_ndjson_lines(sys.stdin, mapping))
+    elif args.input:
+        path = Path(args.input)
+        if path.suffix in (".ndjson", ".jsonl"):
+            events = list(iter_ndjson_lines(path.read_text(encoding="utf-8").splitlines(), mapping))
+        else:
+            events = load_otlp_json(path)
+
+    if stream_mode and (args.stdin or events):
+        summary = run_stream(
+            spec,
+            mapping,
+            events,
+            stream=True,
+            webhook=args.webhook,
+            webhook_timeout=args.webhook_timeout,
+            stop_on_violation=not args.continue_on_violation,
+        )
+        if args.format == "json" and not args.stdin:
+            _print_json({"tool": "verispec", "command": "observe-runtime", **summary})
+        return EXIT_OK if summary.get("ok") else EXIT_VIOLATION
+
+    if not events and not args.listen:
+        print("error: provide --input, --stdin, or --listen", file=sys.stderr)
+        return EXIT_SPEC_ERROR
+
+    result = run_batch(spec, mapping, events)
+    payload = {
+        "tool": "verispec",
+        "version": __version__,
+        "command": "observe-runtime",
+        "spec": _spec_payload(spec),
+        "mapping": str(args.mapping),
+        **result,
+    }
+    if args.format == "json":
+        _print_json(payload)
+    else:
+        print(result.get("message") or result.get("status"))
+    return EXIT_OK if result.get("ok") else EXIT_VIOLATION
+
+
 def _parse_list_arg(value: str | None) -> list[str]:
     if not value:
         return []
@@ -748,7 +908,25 @@ def _add_format(p, default: str = "text") -> None:
     p.add_argument("--format", choices=FORMATS, default=default, help="output format")
 
 
+def _add_check_scale_args(p) -> None:
+    p.add_argument(
+        "--cache-dir",
+        help="store incremental check results here (or set VERISPEC_CACHE_DIR)",
+    )
+    p.add_argument("--no-cache", action="store_true", help="do not read or write the check cache")
+    p.add_argument("--wall-timeout", type=int, help="wall-clock limit for the whole check in ms")
+    p.add_argument("--memory-mb", type=int, help="memory cap for the checker process in MiB")
+    p.add_argument("--solver-memory-mb", type=int, help="Z3 solver max_memory in MiB")
+    p.add_argument(
+        "--parallel-invariants",
+        action="store_true",
+        help="check each invariant in a separate worker (single spec only)",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
+    from .policy import DEFAULT_POLICY_PATH
+
     p = argparse.ArgumentParser(
         prog="verispec",
         description=(
@@ -785,8 +963,25 @@ def build_parser() -> argparse.ArgumentParser:
         help="skip bounded liveness checking (safety invariants only)",
     )
     sp.add_argument("--timeout", type=int, default=30000, help="solver timeout in ms")
+    _add_check_scale_args(sp)
     _add_format(sp)
     sp.set_defaults(func=cmd_check)
+
+    sp = sub.add_parser("check-suite", help="bounded model check many specs (parallel, cached)")
+    sp.add_argument("specs", nargs="+", help="spec YAML paths")
+    sp.add_argument("--bound", type=int, default=10, help="maximum number of steps")
+    sp.add_argument("--invariant", help="only check this invariant on every spec")
+    sp.add_argument("--temporal", help="only check this temporal property (liveness)")
+    sp.add_argument(
+        "--skip-liveness",
+        action="store_true",
+        help="skip bounded liveness checking (safety invariants only)",
+    )
+    sp.add_argument("--timeout", type=int, default=30000, help="solver timeout in ms")
+    sp.add_argument("--jobs", type=int, default=1, help="parallel workers across specs")
+    _add_check_scale_args(sp)
+    _add_format(sp)
+    sp.set_defaults(func=cmd_check_suite)
 
     sp = sub.add_parser("check-trace", help="check that a real implementation follows the spec")
     sp.add_argument("spec")
@@ -872,9 +1067,30 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--note", help="free text note")
     sp.add_argument("--gpg", action="store_true", help="also create a GPG detached signature")
     sp.add_argument("--gpg-key", help="GPG key id")
+    sp.add_argument(
+        "--sigstore",
+        action="store_true",
+        help="also create a keyless Sigstore signature (requires cosign)",
+    )
+    sp.add_argument("--sigstore-identity", help="expected Sigstore certificate identity (verify)")
+    sp.add_argument("--sigstore-issuer", help="expected Sigstore OIDC issuer (verify)")
     sp.add_argument("-o", "--output", help="signature file (default: <spec>.signature.json)")
     _add_format(sp)
     sp.set_defaults(func=cmd_sign)
+
+    policy = sub.add_parser("policy", help="enterprise repository governance policy")
+    policy_sub = policy.add_subparsers(dest="policy_cmd", required=True)
+    sp = policy_sub.add_parser("check", help="enforce .verispec/policy.yaml in CI")
+    sp.add_argument(
+        "--policy",
+        help=f"path to policy file (default: {DEFAULT_POLICY_PATH.as_posix()})",
+    )
+    sp.add_argument(
+        "--repo-root",
+        help="repository root for resolving paths (default: parent of .verispec/)",
+    )
+    _add_format(sp)
+    sp.set_defaults(func=cmd_policy_check)
 
     sp = sub.add_parser("verify-signature", help="verify that a spec still matches its signature")
     sp.add_argument("spec")
@@ -956,6 +1172,43 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--seed", type=int, default=0, help="RNG seed for fuzz walks")
     _add_format(sp)
     sp.set_defaults(func=cmd_verify_loop)
+
+    sp = sub.add_parser(
+        "observe-runtime",
+        help="map OTLP JSON or structured logs to trace steps and check conformance",
+    )
+    sp.add_argument("--spec", required=True, help="VeriSpec YAML contract")
+    sp.add_argument("--mapping", required=True, help="declarative span/log -> step mapping")
+    sp.add_argument("--input", help="OTLP JSON export file or NDJSON log file")
+    sp.add_argument(
+        "--stdin",
+        action="store_true",
+        help="read NDJSON logs or OTLP chunks from stdin (streaming JSON lines on stdout)",
+    )
+    sp.add_argument(
+        "--stream",
+        action="store_true",
+        help="emit step and violation events as JSON lines (default with --stdin or --listen)",
+    )
+    sp.add_argument(
+        "--listen",
+        metavar="HOST:PORT",
+        help="OTLP/HTTP JSON receiver for /v1/traces and /v1/logs (local only)",
+    )
+    sp.add_argument("--webhook", help="POST violation payloads to this URL (optional)")
+    sp.add_argument(
+        "--webhook-timeout",
+        type=float,
+        default=10.0,
+        help="webhook HTTP timeout in seconds",
+    )
+    sp.add_argument(
+        "--continue-on-violation",
+        action="store_true",
+        help="keep processing after a violation (streaming/listen modes)",
+    )
+    _add_format(sp)
+    sp.set_defaults(func=cmd_observe_runtime)
 
     sp = sub.add_parser(
         "spec-strength",

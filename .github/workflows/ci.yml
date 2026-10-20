@@ -37,6 +37,8 @@ jobs:
           verispec check examples/ledger.yaml --bound 4
           ! verispec check examples/bank-buggy.yaml --bound 6
           ! verispec check examples/ledger-buggy.yaml --bound 4
+      - name: Repository governance policy
+        run: verispec policy check
 
   self-check:
     name: VeriSpec checks its own specs

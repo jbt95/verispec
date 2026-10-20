@@ -1,0 +1,46 @@
+version: "1"
+# Maps OpenTelemetry span names and attributes (or structured log fields)
+# into VeriSpec trace steps for examples/bank.yaml.
+log:
+  message_field: message
+rules:
+  - id: init-span
+    when:
+      kind: span
+      span_name: verispec.bank.init
+    action: init
+    params: {}
+    state:
+      balance_a: attribute:balance_a
+      balance_b: attribute:balance_b
+
+  - id: transfer-a-to-b
+    when:
+      kind: span
+      span_name: verispec.bank.transfer_a_to_b
+    action: transfer_a_to_b
+    params:
+      amount: attribute:amount
+    state:
+      balance_a: attribute:balance_a
+      balance_b: attribute:balance_b
+
+  - id: transfer-b-to-a
+    when:
+      kind: span
+      span_name: verispec.bank.transfer_b_to_a
+    action: transfer_b_to_a
+    params:
+      amount: attribute:amount
+    state:
+      balance_a: attribute:balance_a
+      balance_b: attribute:balance_b
+
+  - id: log-step
+    when:
+      log: true
+      field: type
+      equals: verispec_step
+    action: "field:action"
+    params: "field:params"
+    state: "field:state"

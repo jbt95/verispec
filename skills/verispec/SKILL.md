@@ -109,6 +109,12 @@ verispec check examples/bank.yaml --bound 8 --timeout 30000 --format json
 | `--format` | `text` | `text`, `json`, or `sarif` |
 | `--skip-liveness` | off | Safety invariants only (skip temporal liveness) |
 | `--temporal` | — | Only check this named temporal property |
+| `--cache-dir` | — | Incremental result cache (or set `VERISPEC_CACHE_DIR`) |
+| `--no-cache` | off | Skip reading/writing the check cache |
+| `--wall-timeout` | — | Wall-clock cap for the whole check (ms); yields `unknown` |
+| `--memory-mb` | — | Process memory cap (MiB); yields `unknown` if exceeded |
+| `--solver-memory-mb` | — | Z3 `max_memory` (MiB) |
+| `--parallel-invariants` | off | Check each invariant in a separate worker (one spec) |
 
 When the spec declares `temporal` properties, `check` also runs **bounded
 liveness** (lasso-shaped counterexamples) after safety, unless
@@ -116,6 +122,22 @@ liveness** (lasso-shaped counterexamples) after safety, unless
 
 On violation, text output includes step-by-step state, action, params, and
 which invariant broke.
+
+### `check-suite` — many specs (cache + parallelism)
+
+```bash
+verispec check-suite examples/bank.yaml examples/ledger.yaml --bound 8 --jobs 4
+verispec check-suite corpus/*/spec.yaml --bound 4 --cache-dir .verispec-cache --format json
+```
+
+| Flag | Default | Role |
+| --- | --- | --- |
+| `--jobs` | `1` | Parallel workers across specs (output order stays deterministic) |
+| (scale flags) | — | Same cache, timeout, and memory flags as `check` |
+
+Cache keys include the resolved spec digest (imports included), checker options
+(including `--skip-liveness` and `--temporal`), and the VeriSpec version.
+Unchanged entries are skipped on reruns.
 
 ### `check-trace` — replay an implementation trace
 
@@ -179,9 +201,29 @@ verispec init --template queue --lang go --force
 ```bash
 verispec sign examples/bank.yaml --approver "Jane Doe" --note "v1 review"
 verispec sign examples/bank.yaml --approver "Jane" --gpg --gpg-key ABCD1234
+verispec sign examples/bank.yaml --approver "Jane" --sigstore
 verispec verify-signature examples/bank.yaml
 verispec verify-signature examples/bank.yaml --require-cryptographic
 ```
+
+`--sigstore` uses the cosign CLI for keyless signing (optional `sigstore` extra;
+see `SECURITY.md`). GPG and Sigstore are additive; digest-only signatures still
+work unchanged.
+
+### `policy check` — enterprise governance (CI)
+
+Declare requirements in `.verispec/policy.yaml` (which specs govern which paths,
+owners, signed digests, minimum guarantee levels). Enforce in CI:
+
+```bash
+verispec policy check
+verispec policy check --format json
+verispec policy check --format sarif
+verispec policy check --policy path/to/policy.yaml --repo-root .
+```
+
+Exit `1` on policy violations (missing spec, signature, or guarantee). Exit `2`
+if the policy file itself is invalid.
 
 ### `migrate` — bump `spec_version` in file
 
@@ -233,6 +275,25 @@ The VS Code extension in `editors/vscode` starts `verispec lsp` when
 verispec monitor traces/live.json --spec examples/bank.yaml
 verispec monitor traces/live.json --spec examples/bank.yaml --follow --interval 1.0
 ```
+
+### `observe-runtime` — OTLP / logs → trace steps (streaming)
+
+Map OpenTelemetry spans or structured JSON logs to VeriSpec steps with a YAML
+mapping file; checks conformance online.  Local by default (optional `--webhook`).
+
+```bash
+verispec observe-runtime --spec examples/bank.yaml \
+  --mapping examples/runtime-observe/bank-mapping.yaml \
+  --input examples/runtime-observe/bank-otlp.json
+
+cat examples/runtime-observe/bank-logs.ndjson | verispec observe-runtime \
+  --spec examples/bank.yaml --mapping examples/runtime-observe/bank-mapping.yaml --stdin
+
+verispec observe-runtime --spec examples/bank.yaml \
+  --mapping examples/runtime-observe/bank-mapping.yaml --listen 127.0.0.1:4318 --stream
+```
+
+See `docs/runtime-observe.md`.
 
 ### `corpus` — run conformance fixtures
 
