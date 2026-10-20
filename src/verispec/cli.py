@@ -48,7 +48,9 @@ def _spec_payload(spec) -> dict[str, Any]:
     }
 
 
-def _check_payload(spec, result: dict[str, Any], extra: dict[str, Any] | None = None) -> dict[str, Any]:
+def _check_payload(
+    spec, result: dict[str, Any], extra: dict[str, Any] | None = None
+) -> dict[str, Any]:
     payload = {
         "tool": "verispec",
         "version": __version__,
@@ -125,8 +127,7 @@ def cmd_lint(args) -> int:
             where = f" [{f['where']}]" if f["where"] else ""
             print(f"{f['level'].upper()}: {f['code']}{where}: {f['message']}")
         print(
-            f"{result['errors']} error(s), {result['warnings']} warning(s), "
-            f"{result['infos']} info"
+            f"{result['errors']} error(s), {result['warnings']} warning(s), {result['infos']} info"
         )
     return EXIT_OK if result["ok"] else EXIT_VIOLATION
 
@@ -719,7 +720,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="python, typescript, javascript, go, rust, c, java",
     )
     sp.add_argument("-o", "--output", help="output file (default: stdout)")
-    sp.add_argument("--adapter", help="adapter import path (typescript/go) or module:Class (python)")
+    sp.add_argument(
+        "--adapter", help="adapter import path (typescript/go) or module:Class (python)"
+    )
     sp.add_argument("--package", default="verispec_conformance", help="Go package name")
     _add_format(sp)
     sp.set_defaults(func=cmd_gen_tests)
@@ -757,7 +760,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser("init", help="scaffold a spec from a template")
     sp.add_argument("directory", nargs="?", help="target directory (default: .)")
-    sp.add_argument("--template", required=True, help="ledger, idempotency, order, rate-limiter, queue")
+    sp.add_argument(
+        "--template", required=True, help="ledger, idempotency, order, rate-limiter, queue"
+    )
     sp.add_argument("--lang", default="python", choices=["python", "typescript", "go"])
     sp.add_argument("--name", help="name of the generated spec file")
     sp.add_argument("--force", action="store_true")
@@ -861,7 +866,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sp.add_argument("spec")
     sp.add_argument("--trace", help="known-good trace (default: random model walk)")
-    sp.add_argument("--walk-length", type=int, default=4, help="steps when synthesising a base trace")
+    sp.add_argument(
+        "--walk-length", type=int, default=4, help="steps when synthesising a base trace"
+    )
     sp.add_argument("--seed", type=int, default=0)
     sp.add_argument("--max-mutants", type=int, help="limit number of mutants (for large traces)")
     sp.add_argument("-v", "--verbose", action="store_true", help="list caught mutants too")

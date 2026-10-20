@@ -15,8 +15,7 @@ from typing import Any, Literal
 
 import z3
 
-from .expr import SpecError, eval_python, to_z3
-from .expr import Z3Binding
+from .expr import SpecError, Z3Binding, eval_python, to_z3
 from .model import Spec
 from .types import EnumType, RecordType
 from .values import value_to_json
@@ -136,9 +135,7 @@ def _action_name_list(raw: Any, where: str) -> list[str]:
 # --------------------------------------------------------------------------
 
 
-def check_temporal_on_trace(
-    spec: Spec, trace: list[dict[str, Any]]
-) -> dict[str, Any]:
+def check_temporal_on_trace(spec: Spec, trace: list[dict[str, Any]]) -> dict[str, Any]:
     """Evaluate temporal properties on a finite trace.
 
     Returns satisfied properties, pending obligations (not yet discharged at
@@ -226,9 +223,7 @@ def check_temporal_bounded(
     timeout_ms: int = 30000,
 ) -> dict[str, Any]:
     """Search for lasso counterexamples to temporal properties up to ``bound``."""
-    props = [
-        p for p in spec.temporal if not property_filter or p.name == property_filter
-    ]
+    props = [p for p in spec.temporal if not property_filter or p.name == property_filter]
     if property_filter and not props:
         raise SpecError(f"temporal property {property_filter!r} not found")
     if not props:
@@ -279,9 +274,7 @@ def _check_liveness_one(
     for st in states:
         for n, v in spec.vars.items():
             if isinstance(v.type, EnumType):
-                solver.add(
-                    z3.Or(*[st[n]["const"] == z3.StringVal(val) for val in v.type.values])
-                )
+                solver.add(z3.Or(*[st[n]["const"] == z3.StringVal(val) for val in v.type.values]))
 
     _encode_init(solver, spec, states)
     nact = len(spec.actions)
@@ -419,8 +412,7 @@ def _check_liveness_one(
             }
         ],
         "message": (
-            f"LIVENESS COUNTEREXAMPLE for {prop.name} within bound {bound} "
-            f"(lasso steps {ls}..{le})"
+            f"LIVENESS COUNTEREXAMPLE for {prop.name} within bound {bound} (lasso steps {ls}..{le})"
         ),
         "guarantee": "violation-found",
     }
@@ -501,7 +493,7 @@ def _fairness_on_loop(
     if not spec.fairness.weak and not spec.fairness.strong:
         return z3.BoolVal(True)
     action_index = {a.name: i for i, a in enumerate(spec.actions)}
-    loop_transitions = [t for t in range(loop_start, min(loop_end, len(choices)))]
+    loop_transitions = list(range(loop_start, min(loop_end, len(choices))))
     if not loop_transitions:
         return z3.BoolVal(True)
     constraints: list[z3.BoolRef] = []
@@ -532,10 +524,7 @@ def _decode_lasso_pair(spec: Spec, model, states, bound: int) -> tuple[int, int]
     for ls in range(bound):
         for le in range(ls + 1, bound + 1):
             same = z3.And(
-                *[
-                    _state_equal(v, states[ls][n], states[le][n])
-                    for n, v in spec.vars.items()
-                ]
+                *[_state_equal(v, states[ls][n], states[le][n]) for n, v in spec.vars.items()]
             )
             if z3.is_true(model.eval(same, model_completion=True)):
                 return ls, le
@@ -572,8 +561,8 @@ def merge_check_with_liveness(safety: dict[str, Any], liveness: dict[str, Any]) 
         merged["guarantee"] = (
             f"{safety.get('guarantee', '')}; {liveness.get('guarantee', '')}".strip("; ")
         )
-        merged["message"] = (
-            f"{safety.get('message', '')}; {liveness.get('message', '')}".strip("; ")
+        merged["message"] = f"{safety.get('message', '')}; {liveness.get('message', '')}".strip(
+            "; "
         )
     return merged
 

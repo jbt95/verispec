@@ -169,9 +169,7 @@ class Action:
         for pn, pr in (raw.get("params") or {}).items():
             var = Var(pn, pr)
             if not T.is_scalar(var.type):
-                raise SpecError(
-                    f"action {self.name}: parameter {pn} must be a scalar type in v1"
-                )
+                raise SpecError(f"action {self.name}: parameter {pn} must be a scalar type in v1")
             self.params[pn] = var
         self.requires = list(raw.get("requires") or [])
         self.effects = dict(raw.get("effects") or {})
@@ -209,7 +207,7 @@ class Spec:
                 )
             else:
                 raise SpecError("invariants must be strings or {name, expr} mappings")
-        from .temporal import parse_fairness, parse_temporal_list, validate_temporal
+        from .temporal import parse_fairness, parse_temporal_list
 
         self.fairness = parse_fairness(data.get("fairness"))
         self.temporal = parse_temporal_list(data.get("temporal"))
@@ -582,7 +580,8 @@ def _apply_imports(spec: Spec, path: str) -> None:
             goal=p["goal"],
             when=p.get("when"),
         )
-        for p in merged_temporal + [
+        for p in merged_temporal
+        + [
             {
                 "name": p.name,
                 "kind": p.kind,
@@ -651,7 +650,9 @@ def initial_state(spec: Spec) -> dict[str, Any]:
     return state
 
 
-def apply_action(spec: Spec, state: dict[str, Any], action_name: str, params: dict[str, Any]) -> dict[str, Any]:
+def apply_action(
+    spec: Spec, state: dict[str, Any], action_name: str, params: dict[str, Any]
+) -> dict[str, Any]:
     """Apply an action to a state, returning the new state."""
     from .expr import eval_python
 
