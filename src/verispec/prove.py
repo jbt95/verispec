@@ -20,6 +20,8 @@ from .bmc import (
     _preflight,
     _slot,
     _unchanged,
+)
+from .bmc import (
     check as bmc_check,
 )
 from .expr import SpecError, Z3Binding, Z3Map, Z3Seq, Z3Set, to_z3, z3_sort_for
