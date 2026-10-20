@@ -164,6 +164,44 @@ Use the composite Action above, or add an equivalent reviewed gate, when your
 repository requires human approval for contract changes. The CLI exit codes
 and JSON/SARIF formats are stable interfaces for other pipeline systems.
 
+## Incremental check cache (large spec suites)
+
+For repositories with many specs, use `verispec check-suite` with a persistent
+cache directory so unchanged specs skip Z3 on reruns. Cache entries are keyed by
+the resolved spec (including imports), checker flags (`--bound`, timeouts,
+memory limits, `--skip-liveness`, `--temporal`), and the installed VeriSpec
+version.
+
+```yaml
+- uses: actions/checkout@v4
+- uses: actions/setup-python@v5
+  with:
+    python-version: "3.11"
+- name: Restore VeriSpec check cache
+  uses: actions/cache@v4
+  with:
+    path: .verispec-cache
+    key: verispec-check-${{ runner.os }}-${{ hashFiles('**/*.yaml', '**/*.yml') }}-v1
+    restore-keys: |
+      verispec-check-${{ runner.os }}-
+- run: python -m pip install -e ".[test]"
+- run: |
+    verispec check-suite specs/**/*.yaml \
+      --bound 10 \
+      --jobs 4 \
+      --cache-dir .verispec-cache \
+      --format json
+```
+
+Set `VERISPEC_CACHE_DIR` instead of `--cache-dir` when every job should share
+the same default path. Use `--no-cache` to force a full rerun (for example
+after upgrading VeriSpec, because the version is part of the cache key).
+
+Wall-clock and memory limits (`--wall-timeout`, `--memory-mb`,
+`--solver-memory-mb`) return guarantee `unknown` with a reason instead of
+hanging or crashing the runner; treat exit code `1` as inconclusive for those
+cases, same as a solver timeout.
+
 ## Human approval for spec changes
 
 **The spec is human owned.** A pull request that changes the contract should

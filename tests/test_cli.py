@@ -31,13 +31,28 @@ def test_check_unknown_reports_what_it_proved(capsys, monkeypatch):
     # depth returns unknown (do not depend on Z3 timing).
     from verispec import bmc
 
-    def fake_check_one(spec, bound, invariant_filter=None, timeout_ms=30000):
+    def fake_check_one(
+        spec,
+        bound,
+        invariant_filter=None,
+        timeout_ms=30000,
+        solver_memory_mb=None,
+    ):
         if bound < 7:
             return {"status": "ok"}
         return {"status": "unknown", "reason": "timeout", "message": "solver timeout"}
 
     monkeypatch.setattr(bmc, "_check_one", fake_check_one)
-    code, out, _ = run(capsys, "check", BANK, "--bound", "8", "--timeout", "1")
+    code, out, _ = run(
+        capsys,
+        "check",
+        BANK,
+        "--bound",
+        "8",
+        "--timeout",
+        "1",
+        "--skip-liveness",
+    )
     assert code == EXIT_VIOLATION
     assert "no violation up to bound" in out
     assert "could not decide" in out
