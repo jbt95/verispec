@@ -19,8 +19,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .expr import SpecError, eval_python
 from .concurrency import actor_ids
+from .expr import SpecError, eval_python
 from .model import Spec, check_invariants, initial_state
 from .types import MapType, SeqType, SetType
 from .values import json_to_value, state_from_json, value_to_json
