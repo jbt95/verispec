@@ -12,8 +12,8 @@ import sys
 import threading
 import urllib.error
 import urllib.request
-from dataclasses import dataclass, field
 from collections.abc import Callable, Iterable, Iterator
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
