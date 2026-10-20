@@ -200,7 +200,7 @@ def run_benchmarks(
         def suite_cold() -> dict[str, Any]:
             for child in cache_dir.glob("*.json"):
                 child.unlink(missing_ok=True)
-            return run_check_suite(spec_paths, config, jobs=1, cache_dir=cache_dir)
+            return run_check_suite(spec_paths, config, jobs=0, cache_dir=cache_dir)
 
         add(
             BenchCase("check-suite-corpus", "check-suite"),
@@ -209,7 +209,8 @@ def run_benchmarks(
         )
 
         def suite_warm() -> dict[str, Any]:
-            return run_check_suite(spec_paths, config, jobs=suite_jobs, cache_dir=cache_dir)
+            warm_jobs = suite_jobs if suite_jobs > 0 else 0
+            return run_check_suite(spec_paths, config, jobs=warm_jobs, cache_dir=cache_dir)
 
         add(
             BenchCase("check-suite-warm-parallel", "check-suite"),

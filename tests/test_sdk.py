@@ -142,6 +142,15 @@ def test_the_generators_handle_a_spec_with_a_set():
     assert '"posted": []' in gen_typescript(spec)
 
 
+def test_generated_set_add_helpers_sort_domain_elements():
+    """Set snapshots are sorted in JSON; generated runtimes must match."""
+    from verispec.gentests import gen_go, gen_javascript, gen_typescript
+
+    spec = load_spec(ROOT / "examples" / "ledger.yaml")
+    for code in (gen_typescript(spec), gen_javascript(spec), gen_go(spec)):
+        assert "veriSetCanonical" in code
+
+
 def test_the_go_generator_emits_a_go_literal():
     """JSON is not valid Go: the initial state has to be a Go literal."""
     from verispec.gentests import gen_go

@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from verispec.bmc import (
-    _check_after_preflight_incremental,
+    _check_after_preflight_layered,
     _check_after_preflight_rebuild,
     _preflight,
 )
@@ -27,9 +27,7 @@ SPECS = [
 def test_incremental_deepening_matches_rebuild(spec_path: Path, bound: int) -> None:
     spec = load_spec(spec_path)
     preflight = _preflight(spec, bound, 30000)
-    incremental = _check_after_preflight_incremental(
-        spec, bound, None, 30000, None
-    )
+    incremental = _check_after_preflight_layered(spec, bound, None, 30000, None)
     rebuild = _check_after_preflight_rebuild(
         spec, bound, None, 30000, None, preflight
     )

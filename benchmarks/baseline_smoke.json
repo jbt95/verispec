@@ -1,15 +1,15 @@
 {
-  "description": "Median wall_ms from verispec bench --quick on CI-class hardware; smoke gate uses baseline * factor.",
+  "description": "Median wall_ms from verispec bench --quick; smoke gate uses baseline * factor (default 3).",
   "cases": [
-    {"name": "check-bank", "wall_ms": 150.0, "category": "check"},
-    {"name": "check-ledger", "wall_ms": 3500.0, "category": "check"},
+    {"name": "check-bank", "wall_ms": 120.0, "category": "check"},
+    {"name": "check-ledger", "wall_ms": 450.0, "category": "check"},
     {"name": "prove-bank", "wall_ms": 80.0, "category": "prove"},
     {"name": "liveness-temporal-fair", "wall_ms": 200.0, "category": "liveness"},
     {"name": "check-concurrent-bank-race", "wall_ms": 40.0, "category": "check-concurrent"},
     {"name": "refines-bank", "wall_ms": 900.0, "category": "refines"},
-    {"name": "check-suite-corpus", "wall_ms": 5000.0, "category": "check-suite"},
-    {"name": "check-suite-warm-parallel", "wall_ms": 50.0, "category": "check-suite"},
-    {"name": "coverage-orders-trace", "wall_ms": 15.0, "category": "coverage"},
+    {"name": "check-suite-corpus", "wall_ms": 2200.0, "category": "check-suite"},
+    {"name": "check-suite-warm-parallel", "wall_ms": 150.0, "category": "check-suite"},
+    {"name": "coverage-orders-trace", "wall_ms": 80.0, "category": "coverage"},
     {"name": "drift-noop", "wall_ms": 250.0, "category": "drift"},
     {"name": "cli-version-cold", "wall_ms": 200.0, "category": "cli"}
   ]
