@@ -1,6 +1,21 @@
 # Changelog
 
-All notable changes to VeriSpec are documented here. The project follows
+All notable changes to VeriSpec are documented here.
+
+## [Unreleased]
+
+### Spec format
+
+- **Added** optional `fairness` (weak/strong action lists) and `temporal`
+  properties (`eventually`, `leads_to`) per [RFC-0002](rfcs/0002-temporal-liveness.md).
+  Existing specs without these fields are unchanged.
+
+### CLI
+
+- **Added** bounded liveness checking to `verispec check` (lasso counterexamples),
+  with `--skip-liveness` and `--temporal <name>`.
+- **Added** pending temporal obligations at trace end in `verispec check-trace`.
+- **Extended** `export-tla` with temporal formulas and fairness conjuncts. The project follows
 [semantic versioning](https://semver.org/) for the package, and the spec
 format has its own version, carried by the `spec_version` field (see
 [`GOVERNANCE.md`](GOVERNANCE.md)).

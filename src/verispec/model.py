@@ -169,9 +169,7 @@ class Action:
         for pn, pr in (raw.get("params") or {}).items():
             var = Var(pn, pr)
             if not T.is_scalar(var.type):
-                raise SpecError(
-                    f"action {self.name}: parameter {pn} must be a scalar type in v1"
-                )
+                raise SpecError(f"action {self.name}: parameter {pn} must be a scalar type in v1")
             self.params[pn] = var
         self.requires = list(raw.get("requires") or [])
         self.effects = dict(raw.get("effects") or {})
@@ -209,6 +207,10 @@ class Spec:
                 )
             else:
                 raise SpecError("invariants must be strings or {name, expr} mappings")
+        from .temporal import parse_fairness, parse_temporal_list
+
+        self.fairness = parse_fairness(data.get("fairness"))
+        self.temporal = parse_temporal_list(data.get("temporal"))
         self._convert_effects()
         self.enum_map: dict[str, int] = {}
         for v in list(self.vars.values()) + [p for a in self.actions for p in a.params.values()]:
@@ -275,7 +277,7 @@ class Spec:
         Imports are already merged and namespaced, so the result can be
         rebuilt with `load_spec_data` without touching the file system.
         """
-        return {
+        out: dict[str, Any] = {
             "name": self.name,
             "description": self.description,
             "spec_version": self.spec_version,
@@ -284,6 +286,22 @@ class Spec:
             "actions": [a.raw for a in self.actions],
             "invariants": list(self.invariants),
         }
+        if self.fairness.weak or self.fairness.strong:
+            out["fairness"] = {
+                "weak": list(self.fairness.weak),
+                "strong": list(self.fairness.strong),
+            }
+        if self.temporal:
+            out["temporal"] = [
+                {
+                    "name": p.name,
+                    "kind": p.kind,
+                    "goal": p.goal,
+                    **({"when": p.when} if p.when else {}),
+                }
+                for p in self.temporal
+            ]
+        return out
 
     # -- validation ------------------------------------------------------
 
@@ -344,6 +362,9 @@ class Spec:
                 raise SpecError(
                     f"invariant {inv['name']} must be a boolean expression, got {type_name(t)}"
                 )
+        from .temporal import validate_temporal
+
+        validate_temporal(self, self.temporal, self.fairness)
         # bounds sanity
         for v in self.vars.values():
             if v.kind == "int" and v.min is not None and v.max is not None and v.min > v.max:
@@ -478,6 +499,9 @@ def _apply_imports(spec: Spec, path: str) -> None:
     merged_init: dict[str, Any] = {}
     merged_actions: list[dict[str, Any]] = []
     merged_invariants: list[dict[str, str]] = []
+    merged_fairness_weak: list[str] = []
+    merged_fairness_strong: list[str] = []
+    merged_temporal: list[dict[str, Any]] = []
     for imp in spec.imports:
         if not isinstance(imp, dict) or "path" not in imp:
             raise SpecError("every import needs a 'path'")
@@ -516,6 +540,19 @@ def _apply_imports(spec: Spec, path: str) -> None:
             merged_invariants.append(
                 {"name": f"{alias}_{inv['name']}", "expr": _rename_expr(inv["expr"], mapping)}
             )
+        for action_name in imported.fairness.weak:
+            merged_fairness_weak.append(f"{alias}_{action_name}")
+        for action_name in imported.fairness.strong:
+            merged_fairness_strong.append(f"{alias}_{action_name}")
+        for prop in imported.temporal:
+            merged_temporal.append(
+                {
+                    "name": f"{alias}_{prop.name}",
+                    "kind": prop.kind,
+                    "goal": _rename_expr(prop.goal, mapping),
+                    **({"when": _rename_expr(prop.when, mapping)} if prop.when else {}),
+                }
+            )
         spec.modules.append(
             {
                 "alias": alias,
@@ -529,6 +566,31 @@ def _apply_imports(spec: Spec, path: str) -> None:
     spec.init = {**merged_init, **spec.init}
     spec.actions = [Action(a) for a in merged_actions] + spec.actions
     spec.invariants = merged_invariants + spec.invariants
+    from .temporal import FairnessSpec, TemporalProperty, parse_fairness, parse_temporal_list
+
+    local_fairness = parse_fairness(spec.raw.get("fairness"))
+    spec.fairness = FairnessSpec(
+        weak=tuple(merged_fairness_weak) + local_fairness.weak,
+        strong=tuple(merged_fairness_strong) + local_fairness.strong,
+    )
+    spec.temporal = [
+        TemporalProperty(
+            name=p["name"],
+            kind=p["kind"],
+            goal=p["goal"],
+            when=p.get("when"),
+        )
+        for p in merged_temporal
+        + [
+            {
+                "name": p.name,
+                "kind": p.kind,
+                "goal": p.goal,
+                **({"when": p.when} if p.when else {}),
+            }
+            for p in parse_temporal_list(spec.raw.get("temporal"))
+        ]
+    ]
 
 
 def _rename_expr(expr: str, mapping: dict[str, str]) -> str:
@@ -588,7 +650,9 @@ def initial_state(spec: Spec) -> dict[str, Any]:
     return state
 
 
-def apply_action(spec: Spec, state: dict[str, Any], action_name: str, params: dict[str, Any]) -> dict[str, Any]:
+def apply_action(
+    spec: Spec, state: dict[str, Any], action_name: str, params: dict[str, Any]
+) -> dict[str, Any]:
     """Apply an action to a state, returning the new state."""
     from .expr import eval_python
 

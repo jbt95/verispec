@@ -61,7 +61,9 @@ to HTML when `--format` is omitted.
 | Label | Meaning |
 | --- | --- |
 | `bounded-proved(k)` | No invariant violated in any execution up to depth *k* (not a full proof) |
+| `bounded-liveness-proved(k)` | No liveness counterexample (lasso) up to depth *k* (not a full proof) |
 | `conformance-tested` | Recorded trace replayed and every step conformed |
+| `pending-obligation` | Trace conforms but a temporal property is not yet satisfied at trace end |
 | `violation-found` | Concrete counterexample |
 | `unknown` | Solver or checker could not decide |
 
@@ -105,6 +107,12 @@ verispec check examples/bank.yaml --bound 8 --timeout 30000 --format json
 | `--invariant` | — | Only search violations of this invariant name |
 | `--timeout` | `30000` | Z3 timeout (ms) |
 | `--format` | `text` | `text`, `json`, or `sarif` |
+| `--skip-liveness` | off | Safety invariants only (skip temporal liveness) |
+| `--temporal` | — | Only check this named temporal property |
+
+When the spec declares `temporal` properties, `check` also runs **bounded
+liveness** (lasso-shaped counterexamples) after safety, unless
+`--skip-liveness`. Guarantees may include `bounded-liveness-proved(k)`.
 
 On violation, text output includes step-by-step state, action, params, and
 which invariant broke.

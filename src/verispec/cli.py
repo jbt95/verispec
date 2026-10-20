@@ -48,7 +48,9 @@ def _spec_payload(spec) -> dict[str, Any]:
     }
 
 
-def _check_payload(spec, result: dict[str, Any], extra: dict[str, Any] | None = None) -> dict[str, Any]:
+def _check_payload(
+    spec, result: dict[str, Any], extra: dict[str, Any] | None = None
+) -> dict[str, Any]:
     payload = {
         "tool": "verispec",
         "version": __version__,
@@ -62,6 +64,8 @@ def _check_payload(spec, result: dict[str, Any], extra: dict[str, Any] | None = 
         "violated": result.get("violated", []),
         "violations": result.get("violations", []),
         "trace": result.get("trace", []),
+        "lasso": result.get("lasso"),
+        "liveness": result.get("liveness"),
     }
     if extra:
         payload.update(extra)
@@ -123,8 +127,7 @@ def cmd_lint(args) -> int:
             where = f" [{f['where']}]" if f["where"] else ""
             print(f"{f['level'].upper()}: {f['code']}{where}: {f['message']}")
         print(
-            f"{result['errors']} error(s), {result['warnings']} warning(s), "
-            f"{result['infos']} info"
+            f"{result['errors']} error(s), {result['warnings']} warning(s), {result['infos']} info"
         )
     return EXIT_OK if result["ok"] else EXIT_VIOLATION
 
@@ -132,6 +135,7 @@ def cmd_lint(args) -> int:
 def cmd_check(args) -> int:
     from .bmc import check, format_result
     from .sarif import to_sarif
+    from .temporal import check_temporal_bounded, merge_check_with_liveness
 
     spec = _load_spec_or_die(args.spec)
     started = time.monotonic()
@@ -141,14 +145,30 @@ def cmd_check(args) -> int:
         invariant_filter=args.invariant,
         timeout_ms=args.timeout,
     )
+    if not args.skip_liveness and spec.temporal and result.get("status") == "ok":
+        liveness = check_temporal_bounded(
+            spec,
+            bound=args.bound,
+            property_filter=args.temporal,
+            timeout_ms=args.timeout,
+        )
+        result = merge_check_with_liveness(result, liveness)
     result["duration_ms"] = int((time.monotonic() - started) * 1000)
     payload = _check_payload(spec, result)
+    if result.get("liveness"):
+        payload["liveness"] = result["liveness"]
+    if result.get("lasso"):
+        payload["lasso"] = result["lasso"]
     if args.format == "json":
         _print_json(payload)
     elif args.format == "sarif":
         _print_json(to_sarif(result, str(args.spec)))
     else:
         print(format_result(spec, result))
+        if result.get("liveness") and result["liveness"].get("status") == "violation":
+            from .temporal import format_liveness_result
+
+            print(format_liveness_result(spec, result["liveness"]))
     return EXIT_OK if result["status"] == "ok" else EXIT_VIOLATION
 
 
@@ -172,6 +192,7 @@ def cmd_check_trace(args) -> int:
         "expected": result.get("expected"),
         "got": result.get("got"),
         "violated": result.get("violated", []),
+        "temporal": result.get("temporal"),
     }
     if args.format == "json":
         _print_json(payload)
@@ -743,6 +764,12 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("spec")
     sp.add_argument("--bound", type=int, default=10, help="maximum number of steps")
     sp.add_argument("--invariant", help="only check this invariant")
+    sp.add_argument("--temporal", help="only check this temporal property (liveness)")
+    sp.add_argument(
+        "--skip-liveness",
+        action="store_true",
+        help="skip bounded liveness checking (safety invariants only)",
+    )
     sp.add_argument("--timeout", type=int, default=30000, help="solver timeout in ms")
     _add_format(sp)
     sp.set_defaults(func=cmd_check)
@@ -761,7 +788,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="python, typescript, javascript, go, rust, c, java",
     )
     sp.add_argument("-o", "--output", help="output file (default: stdout)")
-    sp.add_argument("--adapter", help="adapter import path (typescript/go) or module:Class (python)")
+    sp.add_argument(
+        "--adapter", help="adapter import path (typescript/go) or module:Class (python)"
+    )
     sp.add_argument("--package", default="verispec_conformance", help="Go package name")
     _add_format(sp)
     sp.set_defaults(func=cmd_gen_tests)
@@ -799,7 +828,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser("init", help="scaffold a spec from a template")
     sp.add_argument("directory", nargs="?", help="target directory (default: .)")
-    sp.add_argument("--template", required=True, help="ledger, idempotency, order, rate-limiter, queue")
+    sp.add_argument(
+        "--template", required=True, help="ledger, idempotency, order, rate-limiter, queue"
+    )
     sp.add_argument("--lang", default="python", choices=["python", "typescript", "go"])
     sp.add_argument("--name", help="name of the generated spec file")
     sp.add_argument("--force", action="store_true")
@@ -903,7 +934,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sp.add_argument("spec")
     sp.add_argument("--trace", help="known-good trace (default: random model walk)")
-    sp.add_argument("--walk-length", type=int, default=4, help="steps when synthesising a base trace")
+    sp.add_argument(
+        "--walk-length", type=int, default=4, help="steps when synthesising a base trace"
+    )
     sp.add_argument("--seed", type=int, default=0)
     sp.add_argument("--max-mutants", type=int, help="limit number of mutants (for large traces)")
     sp.add_argument("-v", "--verbose", action="store_true", help="list caught mutants too")
