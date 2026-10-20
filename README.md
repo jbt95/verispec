@@ -51,6 +51,9 @@ verispec validate examples/bank.yaml
 verispec check examples/bank.yaml --bound 10
 # no violation up to bound 10  (bounded claim only, not a proof for all depths; guarantee: bounded-proved(10))
 
+verispec prove examples/bank.yaml
+# invariants proved for all depths by 1-induction  (unbounded guarantee: proved)
+
 verispec check examples/bank-buggy.yaml --bound 10
 # COUNTEREXAMPLE found within bound 2: invariant(s) violated: non_negative
 #   step 0: state={'balance_a': 50, 'balance_b': 50}

@@ -68,6 +68,17 @@ def _check_payload(
         "lasso": result.get("lasso"),
         "liveness": result.get("liveness"),
     }
+    for key in (
+        "induction_k",
+        "proof_method",
+        "induction_cex",
+        "reason",
+        "safety_only",
+        "temporal_scope",
+        "temporal_note",
+    ):
+        if key in result:
+            payload[key] = result[key]
     if extra:
         payload.update(extra)
     return payload
@@ -136,6 +147,8 @@ def cmd_lint(args) -> int:
 def cmd_check(args) -> int:
     from .bmc import check, format_result
     from .check_config import config_from_namespace, resolve_cache_dir
+    from .prove import format_result as format_prove_result
+    from .prove import prove
     from .sarif import to_sarif
     from .scaled_check import apply_liveness, run_bounded_check
 
@@ -143,7 +156,20 @@ def cmd_check(args) -> int:
     config = config_from_namespace(args)
     cache_dir = resolve_cache_dir(args)
     started = time.monotonic()
-    if cache_dir or config.needs_subprocess() or config.parallel_invariants:
+    command_name = "check"
+    format_fn = format_result
+    if getattr(args, "unbounded", False):
+        result = prove(
+            spec,
+            k=getattr(args, "induction_k", 1),
+            invariant_filter=args.invariant,
+            timeout_ms=args.timeout,
+            method=getattr(args, "proof_method", "induction"),
+            precheck_bound=args.bound,
+        )
+        format_fn = format_prove_result
+        command_name = "prove"
+    elif cache_dir or config.needs_subprocess() or config.parallel_invariants:
         result = run_bounded_check(
             spec,
             config,
@@ -154,21 +180,47 @@ def cmd_check(args) -> int:
         result = check(spec, **config.to_bmc_kwargs())
         result = apply_liveness(spec, config, result)
     result["duration_ms"] = int((time.monotonic() - started) * 1000)
-    payload = _check_payload(spec, result)
-    if result.get("liveness"):
-        payload["liveness"] = result["liveness"]
-    if result.get("lasso"):
-        payload["lasso"] = result["lasso"]
+    payload = _check_payload(spec, result, extra={"command": command_name})
     if args.format == "json":
         _print_json(payload)
     elif args.format == "sarif":
         _print_json(to_sarif(result, str(args.spec)))
     else:
-        print(format_result(spec, result))
-        if result.get("liveness") and result["liveness"].get("status") == "violation":
+        print(format_fn(spec, result))
+        if (
+            not getattr(args, "unbounded", False)
+            and result.get("liveness")
+            and result["liveness"].get("status") == "violation"
+        ):
             from .temporal import format_liveness_result
 
             print(format_liveness_result(spec, result["liveness"]))
+    return EXIT_OK if result["status"] == "ok" else EXIT_VIOLATION
+
+
+def cmd_prove(args) -> int:
+    from .prove import format_result as format_prove_result
+    from .prove import prove
+    from .sarif import to_sarif
+
+    spec = _load_spec_or_die(args.spec)
+    started = time.monotonic()
+    result = prove(
+        spec,
+        k=args.k,
+        invariant_filter=args.invariant,
+        timeout_ms=args.timeout,
+        method=args.method,
+        precheck_bound=args.bound,
+    )
+    result["duration_ms"] = int((time.monotonic() - started) * 1000)
+    payload = _check_payload(spec, result, extra={"command": "prove"})
+    if args.format == "json":
+        _print_json(payload)
+    elif args.format == "sarif":
+        _print_json(to_sarif(result, str(args.spec)))
+    else:
+        print(format_prove_result(spec, result))
     return EXIT_OK if result["status"] == "ok" else EXIT_VIOLATION
 
 
@@ -986,9 +1038,48 @@ def build_parser() -> argparse.ArgumentParser:
         help="skip bounded liveness checking (safety invariants only)",
     )
     sp.add_argument("--timeout", type=int, default=30000, help="solver timeout in ms")
+    sp.add_argument(
+        "--unbounded",
+        action="store_true",
+        help="attempt an unbounded invariant proof (k-induction) instead of bounded BMC",
+    )
+    sp.add_argument(
+        "--induction-k",
+        type=int,
+        default=1,
+        dest="induction_k",
+        help="k for k-induction when --unbounded is set (default 1)",
+    )
+    sp.add_argument(
+        "--proof-method",
+        choices=("induction", "spacer"),
+        default="induction",
+        dest="proof_method",
+        help="proof engine for --unbounded (default induction)",
+    )
     _add_check_scale_args(sp)
     _add_format(sp)
     sp.set_defaults(func=cmd_check)
+
+    sp = sub.add_parser("prove", help="try to prove invariants for all depths (k-induction)")
+    sp.add_argument("spec")
+    sp.add_argument(
+        "--bound",
+        type=int,
+        default=10,
+        help="bounded precheck depth before induction (default 10)",
+    )
+    sp.add_argument("--k", type=int, default=1, help="induction depth k (default 1)")
+    sp.add_argument("--invariant", help="only prove this invariant")
+    sp.add_argument("--timeout", type=int, default=30000, help="solver timeout in ms")
+    sp.add_argument(
+        "--method",
+        choices=("induction", "spacer"),
+        default="induction",
+        help="proof engine (default induction; spacer is experimental)",
+    )
+    _add_format(sp)
+    sp.set_defaults(func=cmd_prove)
 
     sp = sub.add_parser("check-suite", help="bounded model check many specs (parallel, cached)")
     sp.add_argument("specs", nargs="+", help="spec YAML paths")

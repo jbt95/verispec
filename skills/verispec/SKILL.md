@@ -61,6 +61,7 @@ to HTML when `--format` is omitted.
 | Label | Meaning |
 | --- | --- |
 | `bounded-proved(k)` | No invariant violated in any execution up to depth *k* (not a full proof) |
+| `proved` | Safety invariants proved for all depths (k-induction; temporal liveness excluded) |
 | `bounded-liveness-proved(k)` | No liveness counterexample (lasso) up to depth *k* (not a full proof) |
 | `conformance-tested` | Recorded trace replayed and every step conformed |
 | `pending-obligation` | Trace conforms but a temporal property is not yet satisfied at trace end |
@@ -110,6 +111,9 @@ verispec check examples/bank.yaml --bound 8 --timeout 30000 --format json
 | `--format` | `text` | `text`, `json`, or `sarif` |
 | `--skip-liveness` | off | Safety invariants only (skip temporal liveness) |
 | `--temporal` | — | Only check this named temporal property |
+| `--unbounded` | off | Run k-induction (`prove`) instead of bounded BMC |
+| `--induction-k` | `1` | k for `--unbounded` |
+| `--proof-method` | `induction` | `induction` or experimental `spacer` with `--unbounded` |
 | `--cache-dir` | — | Incremental result cache (or set `VERISPEC_CACHE_DIR`) |
 | `--no-cache` | off | Skip reading/writing the check cache |
 | `--wall-timeout` | — | Wall-clock cap for the whole check (ms); yields `unknown` |
@@ -120,9 +124,31 @@ verispec check examples/bank.yaml --bound 8 --timeout 30000 --format json
 When the spec declares `temporal` properties, `check` also runs **bounded
 liveness** (lasso-shaped counterexamples) after safety, unless
 `--skip-liveness`. Guarantees may include `bounded-liveness-proved(k)`.
+`--unbounded` proves **safety invariants only** and does not run liveness.
 
 On violation, text output includes step-by-step state, action, params, and
 which invariant broke.
+
+### `prove` — unbounded safety invariant proof (k-induction)
+
+```bash
+verispec prove examples/bank.yaml
+verispec prove examples/bank.yaml --k 2 --bound 12 --format json
+verispec check examples/bank.yaml --unbounded --induction-k 1
+```
+
+| Flag | Default | Role |
+| --- | --- | --- |
+| `--bound` | `10` | Bounded BMC precheck before induction |
+| `--k` | `1` | Induction depth |
+| `--invariant` | — | Only prove this invariant |
+| `--timeout` | `30000` | Z3 timeout (ms) |
+| `--method` | `induction` | `induction` or experimental `spacer` |
+
+Success uses guarantee `proved` (safety only). Temporal properties are not
+proved; use `verispec check` for bounded liveness. If the inductive step fails,
+status is `unknown` with a counterexample-to-induction trace when the solver
+finds one.
 
 ### `check-suite` — many specs (cache + parallelism)
 

@@ -1,7 +1,7 @@
 # Guarantees
 
 Every verification result carries a label that says exactly what was
-established. There are five verification labels; a result without one has no
+established. There are six verification labels; a result without one has no
 clear scope. The MCP `list_invariants` response uses `not-checked` to say
 that listing an invariant did not run a check—that is not a guarantee label.
 
@@ -22,6 +22,8 @@ flowchart TD
     Check["verispec check<br/>explores the spec"] --> Result{"Solver result"}
     Result -->|Counterexample| Violation["violation-found"]
     Result -->|"No violation through requested k"| Bounded["bounded-proved(k)"]
+    Prove["verispec prove<br/>k-induction"] -->|Inductive step closes| Proved["proved<br/>unbounded"]
+    Prove -->|CTI or solver inconclusive| Unknown
     Result -->|"Undecided before any completed bound"| Unknown["unknown<br/>inconclusive; fail closed"]
     Result -->|"Undecided after completed bound j"| Earlier["bounded-proved(j)<br/>deeper search remains unknown"]
     Trace["verispec check-trace"] --> Conformance["conformance-tested<br/>this recorded trace only"]
@@ -37,6 +39,7 @@ approved digest.
 | Label | Emitted by | Status |
 | --- | --- | --- |
 | `bounded-proved(k)` | `verispec check` | No violation up to depth *k*. |
+| `proved` | `verispec prove`, `verispec check --unbounded` | Invariants proved for all depths (k-induction). |
 | `conformance-tested` | `verispec check-trace`, `verispec monitor` | A recorded run conformed. |
 | `signature-verified` | `verispec verify-signature` | The spec still matches the digest a human approved. |
 | `violation-found` | `verispec check`, `verispec check-trace` | A concrete counterexample exists. |
@@ -54,6 +57,24 @@ valid, `digest-match` when only the digest matches, and `digest-mismatch`,
 `signature-verified` outcome and its failures.
 
 ## What each label proves
+
+### `proved`
+
+**It proves:** the spec **safety invariants** hold on every execution, for any
+number of steps. VeriSpec establishes this with *k-induction*: a bounded base
+case through depth *k−1*, then an inductive step showing that *k* consecutive
+states satisfying the invariants cannot be followed by a violating state.
+
+**It does not prove:** temporal liveness properties (`temporal` / `eventually` /
+`leads_to`); use `verispec check` for bounded liveness (`bounded-liveness-proved(k)`).
+It does not prove anything about a particular implementation (the proof is over
+the *spec* transition system, like bounded checking). It also does not apply
+when the inductive step fails to close: then the guarantee is `unknown` and the
+tool may report a *counterexample to induction* (states that satisfy the
+invariants but whose successor does not). That CTI is a hint to strengthen
+invariants, not a runtime bug.
+
+Use `verispec prove SPEC` or `verispec check SPEC --unbounded`.
 
 ### `bounded-proved(k)`
 
@@ -273,6 +294,7 @@ While you wait, the classification of a suspected false positive helps:
 | "The spec is verified." | "The spec still matches the digest that Alice approved (`signature-verified`)." |
 | "The check passed, so there are no bugs." | "The check passed at bound 10. Deeper runs are not covered." |
 
-The word "proved" appears in exactly one label, and that label says `k` in it
-on purpose. The word "verified" belongs to the signature check, where it
-means "the bytes are the bytes that were approved", and nowhere else.
+The word "proved" appears in the unbounded label `proved` and in bounded
+`bounded-proved(k)` (which names *k* on purpose). The word "verified" belongs
+to the signature check, where it means "the bytes are the bytes that were
+approved", and nowhere else.

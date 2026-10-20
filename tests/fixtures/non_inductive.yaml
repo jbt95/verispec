@@ -1,0 +1,14 @@
+spec_version: "1.0"
+name: NonInductive
+description: Invariant holds on reachable states but is not inductive (demo CTI).
+vars:
+  x: {type: int, min: 0, max: 10}
+init:
+  x: "0"
+actions:
+  - name: inc
+    requires: ["x < 10"]
+    effects:
+      x: "x + 1"
+invariants:
+  - {name: small, expr: "x == 0 or x == 1"}
