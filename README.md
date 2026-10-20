@@ -215,6 +215,15 @@ may be too weak). Caught mutants get a typed failure label (`missing_step`,
 verispec spec-strength examples/bank.yaml --trace examples/traces/bank-valid.json
 ```
 
+**Refinement checking** (RFC-0002): a concrete spec can declare `refines:` with a
+state abstraction and per-action simulation (or stutter). `verispec refines` checks
+bounded refinement against the abstract spec and reports counterexamples at both
+levels (`examples/bank-concrete-pending.yaml` refines `examples/bank.yaml`).
+
+```bash
+verispec refines examples/bank-concrete-pending.yaml --bound 10
+```
+
 Not ported: RL fine-tuning, LLM judges, or GUI automation from those papers—only
 the verification-loop and perturbation-diagnosis patterns, adapted to YAML specs,
 Z3, and trace conformance.

@@ -5,6 +5,22 @@ All notable changes to VeriSpec are documented here. The project follows
 format has its own version, carried by the `spec_version` field (see
 [`GOVERNANCE.md`](GOVERNANCE.md)).
 
+## [Unreleased]
+
+### Spec format
+
+- **Added** optional `refines:` block on a concrete spec (RFC-0002): path to an
+  abstract spec, state abstraction expressions, and action simulation or
+  stutter. Worked example: `examples/bank-concrete-pending.yaml` refines
+  `examples/bank.yaml`.
+
+### CLI
+
+- **Added** `verispec refines` for bounded Z3 refinement checking with
+  dual-level counterexamples.
+- **Added** refinement map comments to `verispec export-tla` output when
+  `refines:` is present.
+
 ## [1.0.0] - 2026-10-19
 
 The first open source release of the library and the CLI. The v0.1 proof of

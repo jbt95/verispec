@@ -129,6 +129,7 @@ Open questions for the maintainers and the community. Be specific.
 | RFC | Title | Status | Summary |
 | --- | --- | --- | --- |
 | [RFC-0001](0001-bounded-collections.md) | Bounded collections, records and modules | IMPLEMENTED | The v1 format adds bounded maps, sets and sequences, records, and a module system, all with finite domains so the Z3 encoding stays total. |
+| [RFC-0002](0002-refinement-mapping.md) | Refinement mapping between specs | ACCEPTED | Concrete specs may declare `refines:` with state abstraction and action simulation; `verispec refines` checks bounded refinement. |
 
 ## Relationship with ADRs
 

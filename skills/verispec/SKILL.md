@@ -315,3 +315,24 @@ verispec spec-strength examples/bank.yaml --walk-length 4 --seed 0 -v
 | `--format` | `text` | `text`, `json`, or `sarif` |
 
 Exit `1` if any mutant **survived** (spec may be too weak).
+
+### `refines` — bounded refinement vs. an abstract spec
+
+The **concrete** YAML carries a `refines:` block (state abstraction + per-action
+simulation or stutter). Checks that every concrete behaviour maps to allowed
+abstract behaviour and that abstract invariants hold on the coupled state.
+
+```bash
+verispec refines examples/bank-concrete-pending.yaml
+verispec refines examples/bank-concrete-pending.yaml examples/bank.yaml --bound 10 --format json
+```
+
+| Flag | Default | Role |
+| --- | --- | --- |
+| `abstract` (positional) | `refines.spec` path | Override abstract spec file |
+| `--bound` | `10` | Max concrete transition steps |
+| `--timeout` | `30000` | Z3 timeout (ms) |
+| `--format` | `text` | `text` or `json` |
+
+Counterexamples list **concrete** and **abstract** traces. Guarantee:
+`bounded-refinement-proved(k)` when no violation is found within depth *k*.
