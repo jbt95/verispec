@@ -639,6 +639,52 @@ def cmd_monitor(args) -> int:
     return EXIT_OK if result.get("ok") else EXIT_VIOLATION
 
 
+def cmd_bench(args) -> int:
+    import json
+
+    from .benchmark_harness import run_benchmarks, run_smoke_gate
+
+    root = Path(args.root).resolve()
+    if args.smoke:
+        ok, failures = run_smoke_gate(
+            root,
+            Path(args.baseline).resolve(),
+            factor=args.factor,
+        )
+        payload = {"tool": "verispec", "command": "bench", "smoke": True, "ok": ok, "failures": failures}
+        if args.format == "json":
+            _print_json(payload)
+        elif ok:
+            print("benchmark smoke: ok")
+        else:
+            for line in failures:
+                print(f"REGRESSION: {line}", file=sys.stderr)
+        return EXIT_OK if ok else EXIT_TOOL_ERROR
+
+    results = run_benchmarks(
+        root,
+        bound=args.bound,
+        prove_k=args.prove_k,
+        concurrent_bound=args.concurrent_bound,
+        suite_jobs=args.jobs,
+        repeats=max(1, args.repeats),
+        quick=args.quick,
+    )
+    rows = [row.to_dict() for row in results]
+    if args.format == "json":
+        _print_json({"tool": "verispec", "command": "bench", "results": rows})
+    else:
+        print(f"{'name':<28} {'category':<16} {'wall_ms':>10} {'rss_mb':>8} {'status':<10}")
+        for row in rows:
+            print(
+                f"{row['name']:<28} {row['category']:<16} "
+                f"{row['wall_ms']:>10.2f} {row['peak_rss_mb']:>8.2f} {row['status']:<10}"
+            )
+    if args.output:
+        Path(args.output).write_text(json.dumps({"results": rows}, indent=2) + "\n")
+    return EXIT_OK
+
+
 def cmd_corpus(args) -> int:
     from .corpus import run_corpus
 

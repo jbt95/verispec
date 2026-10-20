@@ -158,6 +158,8 @@ def run_check_suite(
         raise SpecError("check-suite: no spec paths given")
 
     ordered_paths = sorted(paths, key=lambda p: (Path(p).name, p))
+    if jobs <= 0:
+        jobs = _worker_cap(len(ordered_paths))
     if jobs <= 1 or len(ordered_paths) == 1:
         rows = [
             _suite_worker(p, config, str(cache_dir) if cache_dir else None) for p in ordered_paths

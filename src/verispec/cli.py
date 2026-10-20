@@ -14,6 +14,7 @@ import sys
 
 # Backward compatibility: tests and extensions import command handlers from verispec.cli.
 from .cli_commands import (  # noqa: F401
+    cmd_bench,
     cmd_brief,
     cmd_check,
     cmd_check_concurrent,

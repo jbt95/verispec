@@ -21,6 +21,7 @@ The spec is the human-owned artifact: agents read it, they never edit it.
 from __future__ import annotations
 
 import ast
+import functools
 import re
 from pathlib import Path
 from typing import Any
@@ -609,17 +610,24 @@ def _rename_expr(expr: str, mapping: dict[str, str]) -> str:
     return ast.unparse(tree)
 
 
-def load_spec(path: str | Path) -> Spec:
-    """Load and validate a spec from a YAML file."""
-    p = Path(path)
+@functools.lru_cache(maxsize=128)
+def _load_spec_cached(resolved: str, mtime_ns: int, size: int, display_path: str) -> Spec:
+    """Load a spec file; cache key includes path metadata so edits are visible."""
     try:
-        with open(p) as f:
+        with open(resolved) as f:
             data = yaml.safe_load(f)
     except yaml.YAMLError as error:
-        raise SpecError(f"{p}: invalid YAML: {error}") from error
+        raise SpecError(f"{display_path}: invalid YAML: {error}") from error
     if data is None:
-        raise SpecError(f"{p}: empty spec file")
-    return load_spec_data(data, str(p))
+        raise SpecError(f"{display_path}: empty spec file")
+    return load_spec_data(data, display_path)
+
+
+def load_spec(path: str | Path) -> Spec:
+    """Load and validate a spec from a YAML file."""
+    p = Path(path).resolve()
+    stat = p.stat()
+    return _load_spec_cached(str(p), stat.st_mtime_ns, stat.st_size, str(p))
 
 
 # --------------------------------------------------------------------------

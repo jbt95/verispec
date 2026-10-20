@@ -43,6 +43,15 @@ def test_check_unknown_reports_what_it_proved(capsys, monkeypatch):
         return {"status": "unknown", "reason": "timeout", "message": "solver timeout"}
 
     monkeypatch.setattr(bmc, "_check_one", fake_check_one)
+    monkeypatch.setattr(
+        bmc,
+        "_check_after_preflight",
+        lambda spec, bound, invariant_filter, timeout_ms, solver_memory_mb, preflight: (
+            bmc._check_after_preflight_rebuild(
+                spec, bound, invariant_filter, timeout_ms, solver_memory_mb, preflight
+            )
+        ),
+    )
     code, out, _ = run(
         capsys,
         "check",

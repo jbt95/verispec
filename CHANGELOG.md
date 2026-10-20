@@ -7,6 +7,17 @@ format has its own version, carried by the `spec_version` field (see
 
 ## [Unreleased]
 
+### Performance
+
+- **Added** `verispec bench` and `benchmarks/` harness (wall time, RSS, smoke gate vs
+  `baseline_smoke.json`).
+- **Added** mtime-keyed `load_spec` LRU cache for repeated loads in suites and CLI.
+- **Changed** check cache entries to compact JSON (same semantics, faster writes).
+- **Changed** BMC iterative deepening to reuse one Z3 solver and assert safety at
+  prior bounds (large speedup on deep checks such as ledger).
+- **Changed** `check-suite` default `--jobs 0` (auto parallel workers across specs).
+- **Changed** `load_spec` cache keys to resolved path, `st_mtime_ns`, and `st_size`.
+
 ### Runtime conformance
 
 - **Added** `verispec observe-runtime`: map OTLP JSON exports, NDJSON structured

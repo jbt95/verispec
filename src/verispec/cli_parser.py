@@ -6,6 +6,7 @@ import argparse
 
 from . import __version__
 from .cli_commands import (
+    cmd_bench,
     cmd_brief,
     cmd_check,
     cmd_check_concurrent,
@@ -157,7 +158,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="skip bounded liveness checking (safety invariants only)",
     )
     sp.add_argument("--timeout", type=int, default=30000, help="solver timeout in ms")
-    sp.add_argument("--jobs", type=int, default=1, help="parallel workers across specs")
+    sp.add_argument(
+        "--jobs",
+        type=int,
+        default=0,
+        help="parallel workers across specs (0 = auto, up to CPU count)",
+    )
     _add_check_scale_args(sp)
     _add_format(sp)
     sp.set_defaults(func=cmd_check_suite)
@@ -330,6 +336,34 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--bound", type=int, default=8)
     _add_format(sp)
     sp.set_defaults(func=cmd_corpus)
+
+    sp = sub.add_parser("bench", help="run performance benchmarks or CI smoke gate")
+    sp.add_argument("--root", default=".", help="repository root (default: cwd)")
+    sp.add_argument("--bound", type=int, default=6, help="BMC / liveness bound for timed checks")
+    sp.add_argument("--prove-k", type=int, default=2, help="k-induction parameter for prove bench")
+    sp.add_argument("--concurrent-bound", type=int, default=3, help="bound for check-concurrent bench")
+    sp.add_argument("--jobs", type=int, default=0, help="parallel jobs for warm check-suite bench (0 = auto)")
+    sp.add_argument("--repeats", type=int, default=2, help="median over this many timed runs")
+    sp.add_argument("--quick", action="store_true", help="subset of cases (faster)")
+    sp.add_argument("-o", "--output", help="write JSON results to a file")
+    sp.add_argument(
+        "--smoke",
+        action="store_true",
+        help="compare quick benchmarks against benchmarks/baseline_smoke.json",
+    )
+    sp.add_argument(
+        "--baseline",
+        default="benchmarks/baseline_smoke.json",
+        help="baseline medians for --smoke",
+    )
+    sp.add_argument(
+        "--factor",
+        type=float,
+        default=3.0,
+        help="smoke gate: fail when wall_ms exceeds baseline * factor",
+    )
+    _add_format(sp)
+    sp.set_defaults(func=cmd_bench)
 
     sp = sub.add_parser("mcp", help="run the MCP server on stdio")
     sp.set_defaults(func=cmd_mcp)
