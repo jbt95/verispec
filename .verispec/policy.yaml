@@ -1,0 +1,36 @@
+# VeriSpec enterprise governance policy (policy_version 1.0).
+# Enforced in CI with: verispec policy check
+policy_version: "1.0"
+
+defaults:
+  require_signed_digest: false
+  require_cryptographic: false
+  bound: 6
+
+entries:
+  - name: bank-example
+    spec: examples/bank.yaml
+    paths:
+      - examples/bank_adapter.py
+      - examples/bank_adapter_buggy.py
+    owners:
+      - verispec-maintainers
+    min_guarantee: bounded-proved
+    bound: 6
+
+  - name: ledger-example
+    spec: examples/ledger.yaml
+    paths:
+      - examples/ledger_adapter.py
+    owners:
+      - verispec-maintainers
+    min_guarantee: bounded-proved
+    bound: 4
+
+  - name: corpus-bank
+    spec: corpus/bank/spec.yaml
+    paths:
+      - corpus/bank/*
+    owners:
+      - verispec-maintainers
+    min_guarantee: present
