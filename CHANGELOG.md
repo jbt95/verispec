@@ -64,6 +64,14 @@ format has its own version, carried by the `spec_version` field (see
 - **Added** CI templates for GitLab, Jenkins, and Azure Pipelines under `ci/`.
 - **Extended** `verispec report` with compliance audit HTML/JSON and optional
   PDF (`pdf` extra), including bounded liveness and trace coverage when run.
+- **Changed** CLI implementation split into `cli_common`, `cli_commands`, and
+  `cli_parser` (the `verispec` entry point and public imports are unchanged).
+- **Fixed** invalid YAML when loading a spec is reported as a spec error (exit
+  `2`) instead of a tooling error.
+- **Fixed** `coverage`, `drift`, and `check-tlc` JSON output to use the shared
+  command envelope and clearer exit codes when TLC is missing or fails to run.
+- **Fixed** generated TypeScript/JavaScript/Go `veriSetAdd` helpers to return
+  domain elements in sorted order so adapter snapshots match the spec interpreter.
 
 ### MCP
 

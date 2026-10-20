@@ -57,6 +57,13 @@ func veriMapSet(m any, k any, v any, domain []any) map[string]any {
 	return out
 }
 
+func veriSetCanonical(out []any) []any {
+	sort.Slice(out, func(i, j int) bool {
+		return fmt.Sprintf("%v", out[i]) < fmt.Sprintf("%v", out[j])
+	})
+	return out
+}
+
 func veriSetAdd(s any, v any, domain []any) []any {
 	out := []any{}
 	for _, item := range s.([]any) {
@@ -66,13 +73,13 @@ func veriSetAdd(s any, v any, domain []any) []any {
 		if fmt.Sprintf("%v", d) == fmt.Sprintf("%v", v) {
 			for _, item := range out {
 				if fmt.Sprintf("%v", item) == fmt.Sprintf("%v", v) {
-					return out
+					return veriSetCanonical(out)
 				}
 			}
-			return append(out, v)
+			return veriSetCanonical(append(out, v))
 		}
 	}
-	return out
+	return veriSetCanonical(out)
 }
 
 func veriSetHas(s any, v any) bool {
@@ -139,7 +146,27 @@ func veriContains(l any, v any) bool {
 }
 
 func veriFloorDiv(a, b any) int {
-	return veriToInt(a) / veriToInt(b)
+	x, y := veriToInt(a), veriToInt(b)
+	if y == 0 {
+		panic("division by zero")
+	}
+	q, r := x/y, x%y
+	if r != 0 && ((r < 0) != (y < 0)) {
+		q--
+	}
+	return q
+}
+
+func veriMod(a, b any) int {
+	x, y := veriToInt(a), veriToInt(b)
+	if y == 0 {
+		panic("modulo by zero")
+	}
+	r := x % y
+	if r != 0 && ((r < 0) != (y < 0)) {
+		r += y
+	}
+	return r
 }
 
 func veriAbs(a any) int {

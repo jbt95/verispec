@@ -275,9 +275,13 @@ export function veriMapSet(m: any, k: any, v: any, domain: any[]): any {
   return { ...m, [key]: v };
 }
 
+function veriSetCanonical(s: any[]): any[] {
+  return [...s].sort((a, b) => String(a).localeCompare(String(b)));
+}
+
 export function veriSetAdd(s: any[], v: any, domain: any[]): any[] {
-  if (!domain.includes(v)) return [...s];
-  return s.includes(v) ? [...s] : [...s, v];
+  if (!domain.includes(v)) return veriSetCanonical(s);
+  return veriSetCanonical(s.includes(v) ? s : [...s, v]);
 }
 
 export function veriSetHas(s: any[], v: any): boolean {
@@ -358,9 +362,13 @@ export function veriMapSet(m, k, v, domain) {
   return { ...m, [key]: v };
 }
 
+function veriSetCanonical(s) {
+  return [...s].sort((a, b) => String(a).localeCompare(String(b)));
+}
+
 export function veriSetAdd(s, v, domain) {
-  if (!domain.includes(v)) return [...s];
-  return s.includes(v) ? [...s] : [...s, v];
+  if (!domain.includes(v)) return veriSetCanonical(s);
+  return veriSetCanonical(s.includes(v) ? s : [...s, v]);
 }
 
 export function veriSetHas(s, v) {
@@ -668,6 +676,13 @@ func veriMapSet(m any, k any, v any, domain []any) map[string]any {
 	return out
 }
 
+func veriSetCanonical(out []any) []any {
+	sort.Slice(out, func(i, j int) bool {
+		return fmt.Sprintf("%v", out[i]) < fmt.Sprintf("%v", out[j])
+	})
+	return out
+}
+
 func veriSetAdd(s any, v any, domain []any) []any {
 	out := []any{}
 	for _, item := range s.([]any) {
@@ -677,13 +692,13 @@ func veriSetAdd(s any, v any, domain []any) []any {
 		if fmt.Sprintf("%v", d) == fmt.Sprintf("%v", v) {
 			for _, item := range out {
 				if fmt.Sprintf("%v", item) == fmt.Sprintf("%v", v) {
-					return out
+					return veriSetCanonical(out)
 				}
 			}
-			return append(out, v)
+			return veriSetCanonical(append(out, v))
 		}
 	}
-	return out
+	return veriSetCanonical(out)
 }
 
 func veriSetHas(s any, v any) bool {
