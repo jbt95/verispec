@@ -1,0 +1,47 @@
+{
+  "resourceSpans": [
+    {
+      "resource": {
+        "attributes": [
+          {"key": "service.name", "value": {"stringValue": "bank-demo"}}
+        ]
+      },
+      "scopeSpans": [
+        {
+          "scope": {"name": "verispec"},
+          "spans": [
+            {
+              "traceId": "0102030405060708090a0b0c0d0e0f10",
+              "spanId": "1111111111111111",
+              "name": "verispec.bank.init",
+              "attributes": [
+                {"key": "balance_a", "value": {"intValue": "50"}},
+                {"key": "balance_b", "value": {"intValue": "50"}}
+              ]
+            },
+            {
+              "traceId": "0102030405060708090a0b0c0d0e0f10",
+              "spanId": "2222222222222222",
+              "name": "verispec.bank.transfer_a_to_b",
+              "attributes": [
+                {"key": "amount", "value": {"intValue": "20"}},
+                {"key": "balance_a", "value": {"intValue": "30"}},
+                {"key": "balance_b", "value": {"intValue": "70"}}
+              ]
+            },
+            {
+              "traceId": "0102030405060708090a0b0c0d0e0f10",
+              "spanId": "3333333333333333",
+              "name": "verispec.bank.transfer_b_to_a",
+              "attributes": [
+                {"key": "amount", "value": {"intValue": "10"}},
+                {"key": "balance_a", "value": {"intValue": "40"}},
+                {"key": "balance_b", "value": {"intValue": "60"}}
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

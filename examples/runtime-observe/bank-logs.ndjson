@@ -1,0 +1,3 @@
+{"type": "verispec_step", "action": "init", "params": {}, "state": {"balance_a": 50, "balance_b": 50}}
+{"type": "verispec_step", "action": "transfer_a_to_b", "params": {"amount": 20}, "state": {"balance_a": 30, "balance_b": 70}}
+{"type": "verispec_step", "action": "transfer_b_to_a", "params": {"amount": 10}, "state": {"balance_a": 40, "balance_b": 60}}
