@@ -200,9 +200,29 @@ verispec init --template queue --lang go --force
 ```bash
 verispec sign examples/bank.yaml --approver "Jane Doe" --note "v1 review"
 verispec sign examples/bank.yaml --approver "Jane" --gpg --gpg-key ABCD1234
+verispec sign examples/bank.yaml --approver "Jane" --sigstore
 verispec verify-signature examples/bank.yaml
 verispec verify-signature examples/bank.yaml --require-cryptographic
 ```
+
+`--sigstore` uses the cosign CLI for keyless signing (optional `sigstore` extra;
+see `SECURITY.md`). GPG and Sigstore are additive; digest-only signatures still
+work unchanged.
+
+### `policy check` — enterprise governance (CI)
+
+Declare requirements in `.verispec/policy.yaml` (which specs govern which paths,
+owners, signed digests, minimum guarantee levels). Enforce in CI:
+
+```bash
+verispec policy check
+verispec policy check --format json
+verispec policy check --format sarif
+verispec policy check --policy path/to/policy.yaml --repo-root .
+```
+
+Exit `1` on policy violations (missing spec, signature, or guarantee). Exit `2`
+if the policy file itself is invalid.
 
 ### `migrate` — bump `spec_version` in file
 

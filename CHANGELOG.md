@@ -28,15 +28,22 @@ format has its own version, carried by the `spec_version` field (see
   `--fail-under` for CI and SARIF output.
 - **Added** `verispec drift`: compare a git range against per-action
   `implements` mappings and flag spec/digest vs implementation mismatches.
+- **Added** GitHub Action input `drift-check` to annotate pull requests when
+  drift is detected.
+- **Added** enterprise repository governance: `.verispec/policy.yaml` and
+  `verispec policy check` with JSON and SARIF output for CI.
+- **Added** optional keyless Sigstore signing on `verispec sign --sigstore`
+  (cosign CLI) alongside existing GPG digest signing.
 
 ### MCP
 
 - **Added** `unbounded`, `induction_k`, and `proof_method` options on the
   `verify` tool.
 
-### GitHub Actions
+### Release / supply chain
 
-- **Added** input `drift-check` to annotate pull requests when drift is detected.
+- **Added** CycloneDX SBOM and build provenance attestations to the release
+  workflow; verification steps documented in `SECURITY.md`.
 
 ## [1.0.0] - 2026-10-19
 
