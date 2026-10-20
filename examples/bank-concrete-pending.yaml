@@ -1,0 +1,82 @@
+spec_version: "1.0"
+name: BankConcretePending
+description: >
+  Two accounts with settled balances and pending outbound transfers.
+  Refines the abstract Bank spec: initiating a transfer is invisible at the
+  abstract level; completing it matches transfer_a_to_b / transfer_b_to_a.
+vars:
+  balance_a: {type: int, min: 0, max: 100}
+  balance_b: {type: int, min: 0, max: 100}
+  pending_a: {type: int, min: 0, max: 50}
+  pending_b: {type: int, min: 0, max: 50}
+init:
+  balance_a: "50"
+  balance_b: "50"
+  pending_a: "0"
+  pending_b: "0"
+actions:
+  - name: initiate_a_to_b
+    params:
+      amount: {type: int, min: 1, max: 50}
+    requires:
+      - "amount > 0"
+      - "balance_a >= amount"
+    effects:
+      balance_a: "balance_a - amount"
+      pending_a: "pending_a + amount"
+      pending_b: "pending_b"
+      balance_b: "balance_b"
+  - name: complete_a_to_b
+    params:
+      amount: {type: int, min: 1, max: 50}
+    requires:
+      - "amount > 0"
+      - "pending_a >= amount"
+    effects:
+      pending_a: "pending_a - amount"
+      balance_b: "balance_b + amount"
+      balance_a: "balance_a"
+      pending_b: "pending_b"
+  - name: initiate_b_to_a
+    params:
+      amount: {type: int, min: 1, max: 50}
+    requires:
+      - "amount > 0"
+      - "balance_b >= amount"
+    effects:
+      balance_b: "balance_b - amount"
+      pending_b: "pending_b + amount"
+      pending_a: "pending_a"
+      balance_a: "balance_a"
+  - name: complete_b_to_a
+    params:
+      amount: {type: int, min: 1, max: 50}
+    requires:
+      - "amount > 0"
+      - "pending_b >= amount"
+    effects:
+      pending_b: "pending_b - amount"
+      balance_a: "balance_a + amount"
+      balance_b: "balance_b"
+      pending_a: "pending_a"
+invariants:
+  - {name: funds_conserved, expr: "balance_a + balance_b + pending_a + pending_b == 100"}
+  - {name: non_negative, expr: "balance_a >= 0 and balance_b >= 0 and pending_a >= 0 and pending_b >= 0"}
+refines:
+  spec: bank.yaml
+  state:
+    balance_a: "balance_a + pending_a"
+    balance_b: "balance_b + pending_b"
+  actions:
+    initiate_a_to_b:
+      stutter: true
+    initiate_b_to_a:
+      stutter: true
+    complete_a_to_b:
+      abstract: transfer_a_to_b
+      params:
+        amount: amount
+    complete_b_to_a:
+      abstract: transfer_b_to_a
+      params:
+        amount: amount

@@ -368,6 +368,16 @@ def cmd_export_tla(args) -> int:
 
     spec = _load_spec_or_die(args.spec)
     text = export_tla(spec)
+    if spec.raw.get("refines"):
+        from .refinement import (
+            export_refinement_tla_comment,
+            load_refinement_mapping,
+            resolve_abstract_spec,
+        )
+
+        mapping = load_refinement_mapping(spec)
+        abstract = resolve_abstract_spec(spec, mapping)
+        text = export_refinement_tla_comment(spec, abstract, mapping) + "\n" + text
     if args.output:
         Path(args.output).write_text(text)
         print(f"wrote TLA+ module to {args.output}")
@@ -777,6 +787,56 @@ def cmd_verify_loop(args) -> int:
     if report.verdict == "failure":
         return EXIT_VIOLATION
     if report.verdict == "uncertain":
+        return EXIT_VIOLATION
+    return EXIT_OK
+
+
+def cmd_refines(args) -> int:
+    from .refinement import (
+        check_refinement,
+        format_refinement_result,
+        load_refinement_mapping,
+        resolve_abstract_spec,
+    )
+
+    concrete = _load_spec_or_die(args.concrete)
+    mapping = load_refinement_mapping(concrete)
+    abstract = (
+        _load_spec_or_die(args.abstract)
+        if getattr(args, "abstract", None)
+        else resolve_abstract_spec(concrete, mapping)
+    )
+    started = time.monotonic()
+    result = check_refinement(
+        concrete,
+        abstract,
+        mapping,
+        bound=args.bound,
+        timeout_ms=args.timeout,
+    )
+    result["duration_ms"] = int((time.monotonic() - started) * 1000)
+    payload = {
+        "tool": "verispec",
+        "version": __version__,
+        "command": "refines",
+        "concrete": _spec_payload(concrete),
+        "abstract": _spec_payload(abstract),
+        "status": result.get("status"),
+        "guarantee": result.get("guarantee"),
+        "bound": result.get("bound"),
+        "max_bound": result.get("max_bound", result.get("bound")),
+        "message": result.get("message"),
+        "violations": result.get("violations", []),
+        "concrete_trace": result.get("concrete_trace", []),
+        "abstract_trace": result.get("abstract_trace", []),
+    }
+    if args.format == "json":
+        _print_json(payload)
+    else:
+        print(format_refinement_result(result))
+    if result.get("status") == "violation":
+        return EXIT_VIOLATION
+    if result.get("status") == "unknown":
         return EXIT_VIOLATION
     return EXIT_OK
 
@@ -1296,6 +1356,21 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--seed", type=int, default=0, help="RNG seed for fuzz walks")
     _add_format(sp)
     sp.set_defaults(func=cmd_verify_loop)
+
+    sp = sub.add_parser(
+        "refines",
+        help="check that a concrete spec refines an abstract spec (bounded Z3)",
+    )
+    sp.add_argument("concrete", help="concrete spec with a refines: block")
+    sp.add_argument(
+        "abstract",
+        nargs="?",
+        help="abstract spec (default: refines.spec from the concrete file)",
+    )
+    sp.add_argument("--bound", type=int, default=10, help="maximum concrete steps")
+    sp.add_argument("--timeout", type=int, default=30000, help="solver timeout in ms")
+    _add_format(sp)
+    sp.set_defaults(func=cmd_refines)
 
     sp = sub.add_parser(
         "observe-runtime",

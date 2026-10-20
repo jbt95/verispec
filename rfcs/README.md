@@ -131,6 +131,7 @@ Open questions for the maintainers and the community. Be specific.
 | [RFC-0001](0001-bounded-collections.md) | Bounded collections, records and modules | IMPLEMENTED | The v1 format adds bounded maps, sets and sequences, records, and a module system, all with finite domains so the Z3 encoding stays total. |
 | [RFC-0002](0002-temporal-liveness.md) | Temporal properties and fairness | OPEN | `eventually` and `leads_to` properties, weak/strong fairness on actions, bounded lasso liveness checking, TLA+ export, and pending obligations on finite traces. |
 | [RFC-0003](0003-concurrency-actors.md) | Concurrent actors and interleaving exploration | ACCEPTED | Optional `concurrency.actors` programs, `check-concurrent`, trace `actor` field, partial-order reduction. |
+| [RFC-0004](0004-refinement-mapping.md) | Refinement mapping between specs | ACCEPTED | Concrete specs may declare `refines:` with state abstraction and action simulation; `verispec refines` checks bounded refinement. |
 
 ## Relationship with ADRs
 

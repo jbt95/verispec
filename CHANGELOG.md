@@ -22,6 +22,10 @@ format has its own version, carried by the `spec_version` field (see
 - **Added** optional `concurrency.actors` with per-actor action programs
   ([RFC-0003](rfcs/0003-concurrency-actors.md)).
 - **Added** optional `actor` field on JSON trace steps when a spec declares actors.
+- **Added** optional `refines:` block on a concrete spec ([RFC-0004](rfcs/0004-refinement-mapping.md)):
+  path to an abstract spec, state abstraction expressions, and action simulation or
+  stutter. Worked example: `examples/bank-concrete-pending.yaml` refines
+  `examples/bank.yaml`.
 
 ### CLI
 
@@ -50,6 +54,10 @@ format has its own version, carried by the `spec_version` field (see
   `verispec policy check` with JSON and SARIF output for CI.
 - **Added** optional keyless Sigstore signing on `verispec sign --sigstore`
   (cosign CLI) alongside existing GPG digest signing.
+- **Added** `verispec refines` for bounded Z3 refinement checking with
+  dual-level counterexamples.
+- **Added** refinement map comments to `verispec export-tla` output when
+  `refines:` is present.
 - **Added** `verispec lsp` (optional `lsp` extra): validate/lint diagnostics,
   hover, and go-to-definition.
 - **Added** VS Code language client wiring in `editors/vscode`.
