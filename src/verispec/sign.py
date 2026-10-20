@@ -57,6 +57,9 @@ def sign_spec(
     note: str = "",
     use_gpg: bool = False,
     gpg_key: str | None = None,
+    use_sigstore: bool = False,
+    sigstore_identity: str | None = None,
+    sigstore_issuer: str | None = None,
 ) -> dict[str, Any]:
     """Build a signature document for a spec."""
     digest = spec_digest(spec)
@@ -79,7 +82,20 @@ def sign_spec(
     }
     if use_gpg:
         doc["gpg"] = _gpg_metadata(digest, gpg_key)
+    if use_sigstore:
+        doc["sigstore"] = _sigstore_metadata(digest, sigstore_identity, sigstore_issuer)
     return doc
+
+
+def _sigstore_metadata(
+    digest: str, identity: str | None, issuer: str | None
+) -> dict[str, Any]:
+    from .sigstore_sign import build_sigstore_metadata
+
+    try:
+        return build_sigstore_metadata(digest, identity=identity, issuer=issuer)
+    except RuntimeError as error:
+        raise SpecError(f"Sigstore signing was requested but failed: {error}") from error
 
 
 def _gpg_metadata(digest: str, gpg_key: str | None) -> dict[str, Any]:
@@ -123,6 +139,9 @@ def verify_signature(
     crypto_result = _verify_gpg_document(doc, expected, require_cryptographic)
     if crypto_result is not None:
         return crypto_result
+    sigstore_result = _verify_sigstore_document(doc, expected, require_cryptographic)
+    if sigstore_result is not None:
+        return sigstore_result
     return {
         "ok": True,
         "reason": "digest-match",
@@ -157,6 +176,60 @@ def _read_signature_document(path: Path) -> tuple[dict[str, Any] | None, dict[st
     return doc, None
 
 
+def _verify_sigstore_document(
+    doc: dict[str, Any], digest: str, required: bool
+) -> dict[str, Any] | None:
+    sigstore = doc.get("sigstore")
+    if not isinstance(sigstore, dict):
+        if required and not _has_gpg_signature(doc):
+            return {
+                "ok": False,
+                "reason": "cryptographic-signature-required",
+                "message": "a cryptographic signature is required, but this document only records a digest",
+                "approver": doc.get("approver"),
+                "digest": digest,
+                "cryptographic": False,
+            }
+        return None
+    if not sigstore.get("signed"):
+        if required:
+            return {
+                "ok": False,
+                "reason": "cryptographic-signature-required",
+                "message": "a cryptographic signature is required, but Sigstore metadata is not signed",
+                "approver": doc.get("approver"),
+                "digest": digest,
+                "cryptographic": False,
+            }
+        return None
+    from .sigstore_sign import verify_sigstore_metadata
+
+    ok, message = verify_sigstore_metadata(digest, sigstore)
+    if not ok:
+        return {
+            "ok": False,
+            "reason": "sigstore-invalid",
+            "message": f"Sigstore signature is not valid: {message}",
+        }
+    return {
+        "ok": True,
+        "reason": "verified",
+        "message": (
+            f"spec matches its approved digest and the Sigstore signature verifies "
+            f"(approver: {doc.get('approver')})"
+        ),
+        "approver": doc.get("approver"),
+        "approved_at": doc.get("approved_at"),
+        "digest": digest,
+        "cryptographic": True,
+    }
+
+
+def _has_gpg_signature(doc: dict[str, Any]) -> bool:
+    gpg = doc.get("gpg")
+    return isinstance(gpg, dict) and bool(gpg.get("signed"))
+
+
 def _verify_gpg_document(
     doc: dict[str, Any], digest: str, required: bool
 ) -> dict[str, Any] | None:
@@ -164,7 +237,7 @@ def _verify_gpg_document(
     if not isinstance(gpg, dict) or not isinstance(gpg.get("signed", False), bool):
         return {"ok": False, "reason": "invalid-signature", "message": "malformed GPG metadata"}
     if not gpg.get("signed"):
-        if required:
+        if required and not _has_sigstore_signature(doc):
             return {
                 "ok": False,
                 "reason": "cryptographic-signature-required",
@@ -230,6 +303,11 @@ def _gpg_verify(digest: str, armored: str) -> tuple[bool, str]:
         except (OSError, subprocess.SubprocessError) as e:  # pragma: no cover - environment
             return False, f"gpg failed: {e}"
         return proc.returncode == 0, (proc.stderr or proc.stdout).strip()
+
+
+def _has_sigstore_signature(doc: dict[str, Any]) -> bool:
+    sigstore = doc.get("sigstore")
+    return isinstance(sigstore, dict) and bool(sigstore.get("signed"))
 
 
 def _have_gpg() -> bool:

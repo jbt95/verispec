@@ -30,6 +30,15 @@ format has its own version, carried by the `spec_version` field (see
   `--no-cache`), `check-suite` with `--jobs`, resource limits
   (`--wall-timeout`, `--memory-mb`, `--solver-memory-mb`), and
   `--parallel-invariants` for large spec suites.
+- **Added** enterprise repository governance: `.verispec/policy.yaml` and
+  `verispec policy check` with JSON and SARIF output for CI.
+- **Added** optional keyless Sigstore signing on `verispec sign --sigstore`
+  (cosign CLI) alongside existing GPG digest signing.
+
+### Release / supply chain
+
+- **Added** CycloneDX SBOM and build provenance attestations to the release
+  workflow; verification steps documented in `SECURITY.md`.
 
 ## [1.0.0] - 2026-10-19
 
