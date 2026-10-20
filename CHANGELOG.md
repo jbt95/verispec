@@ -70,6 +70,8 @@ format has its own version, carried by the `spec_version` field (see
   `2`) instead of a tooling error.
 - **Fixed** `coverage`, `drift`, and `check-tlc` JSON output to use the shared
   command envelope and clearer exit codes when TLC is missing or fails to run.
+- **Fixed** generated TypeScript/JavaScript/Go `veriSetAdd` helpers to return
+  domain elements in sorted order so adapter snapshots match the spec interpreter.
 
 ### MCP
 
