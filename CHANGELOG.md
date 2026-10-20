@@ -5,6 +5,15 @@ All notable changes to VeriSpec are documented here. The project follows
 format has its own version, carried by the `spec_version` field (see
 [`GOVERNANCE.md`](GOVERNANCE.md)).
 
+## Unreleased
+
+### CLI
+
+- **Added** incremental check cache (`--cache-dir`, `VERISPEC_CACHE_DIR`,
+  `--no-cache`), `check-suite` with `--jobs`, resource limits
+  (`--wall-timeout`, `--memory-mb`, `--solver-memory-mb`), and
+  `--parallel-invariants` for large spec suites.
+
 ## [1.0.0] - 2026-10-19
 
 The first open source release of the library and the CLI. The v0.1 proof of

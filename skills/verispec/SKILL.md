@@ -105,9 +105,30 @@ verispec check examples/bank.yaml --bound 8 --timeout 30000 --format json
 | `--invariant` | — | Only search violations of this invariant name |
 | `--timeout` | `30000` | Z3 timeout (ms) |
 | `--format` | `text` | `text`, `json`, or `sarif` |
+| `--cache-dir` | — | Incremental result cache (or set `VERISPEC_CACHE_DIR`) |
+| `--no-cache` | off | Skip reading/writing the check cache |
+| `--wall-timeout` | — | Wall-clock cap for the whole check (ms); yields `unknown` |
+| `--memory-mb` | — | Process memory cap (MiB); yields `unknown` if exceeded |
+| `--solver-memory-mb` | — | Z3 `max_memory` (MiB) |
+| `--parallel-invariants` | off | Check each invariant in a separate worker (one spec) |
 
 On violation, text output includes step-by-step state, action, params, and
 which invariant broke.
+
+### `check-suite` — many specs (cache + parallelism)
+
+```bash
+verispec check-suite examples/bank.yaml examples/ledger.yaml --bound 8 --jobs 4
+verispec check-suite corpus/*/spec.yaml --bound 4 --cache-dir .verispec-cache --format json
+```
+
+| Flag | Default | Role |
+| --- | --- | --- |
+| `--jobs` | `1` | Parallel workers across specs (output order stays deterministic) |
+| (scale flags) | — | Same cache, timeout, and memory flags as `check` |
+
+Cache keys include the resolved spec digest (imports included), checker options,
+and the VeriSpec version. Unchanged entries are skipped on reruns.
 
 ### `check-trace` — replay an implementation trace
 
