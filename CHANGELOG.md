@@ -41,6 +41,12 @@ format has its own version, carried by the `spec_version` field (see
   `verispec policy check` with JSON and SARIF output for CI.
 - **Added** optional keyless Sigstore signing on `verispec sign --sigstore`
   (cosign CLI) alongside existing GPG digest signing.
+- **Added** `verispec lsp` (optional `lsp` extra): validate/lint diagnostics,
+  hover, and go-to-definition.
+- **Added** VS Code language client wiring in `editors/vscode`.
+- **Added** CI templates for GitLab, Jenkins, and Azure Pipelines under `ci/`.
+- **Extended** `verispec report` with compliance audit HTML/JSON and optional
+  PDF (`pdf` extra), including bounded liveness and trace coverage when run.
 
 ### Release / supply chain
 
