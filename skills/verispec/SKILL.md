@@ -61,7 +61,9 @@ to HTML when `--format` is omitted.
 | Label | Meaning |
 | --- | --- |
 | `bounded-proved(k)` | No invariant violated in any execution up to depth *k* (not a full proof) |
+| `bounded-liveness-proved(k)` | No liveness counterexample (lasso) up to depth *k* (not a full proof) |
 | `conformance-tested` | Recorded trace replayed and every step conformed |
+| `pending-obligation` | Trace conforms but a temporal property is not yet satisfied at trace end |
 | `violation-found` | Concrete counterexample |
 | `unknown` | Solver or checker could not decide |
 
@@ -105,12 +107,18 @@ verispec check examples/bank.yaml --bound 8 --timeout 30000 --format json
 | `--invariant` | — | Only search violations of this invariant name |
 | `--timeout` | `30000` | Z3 timeout (ms) |
 | `--format` | `text` | `text`, `json`, or `sarif` |
+| `--skip-liveness` | off | Safety invariants only (skip temporal liveness) |
+| `--temporal` | — | Only check this named temporal property |
 | `--cache-dir` | — | Incremental result cache (or set `VERISPEC_CACHE_DIR`) |
 | `--no-cache` | off | Skip reading/writing the check cache |
 | `--wall-timeout` | — | Wall-clock cap for the whole check (ms); yields `unknown` |
 | `--memory-mb` | — | Process memory cap (MiB); yields `unknown` if exceeded |
 | `--solver-memory-mb` | — | Z3 `max_memory` (MiB) |
 | `--parallel-invariants` | off | Check each invariant in a separate worker (one spec) |
+
+When the spec declares `temporal` properties, `check` also runs **bounded
+liveness** (lasso-shaped counterexamples) after safety, unless
+`--skip-liveness`. Guarantees may include `bounded-liveness-proved(k)`.
 
 On violation, text output includes step-by-step state, action, params, and
 which invariant broke.
@@ -127,8 +135,9 @@ verispec check-suite corpus/*/spec.yaml --bound 4 --cache-dir .verispec-cache --
 | `--jobs` | `1` | Parallel workers across specs (output order stays deterministic) |
 | (scale flags) | — | Same cache, timeout, and memory flags as `check` |
 
-Cache keys include the resolved spec digest (imports included), checker options,
-and the VeriSpec version. Unchanged entries are skipped on reruns.
+Cache keys include the resolved spec digest (imports included), checker options
+(including `--skip-liveness` and `--temporal`), and the VeriSpec version.
+Unchanged entries are skipped on reruns.
 
 ### `check-trace` — replay an implementation trace
 
@@ -336,3 +345,53 @@ verispec spec-strength examples/bank.yaml --walk-length 4 --seed 0 -v
 | `--format` | `text` | `text`, `json`, or `sarif` |
 
 Exit `1` if any mutant **survived** (spec may be too weak).
+
+### `coverage` — spec coverage from traces and test events
+
+Reports which actions, guard branches (`requires`), invariants, and parameter
+boundaries were exercised.  Traces mark successful guard paths; optional
+coverage-events JSON can record rejected guards from property tests.
+
+```bash
+verispec coverage examples/bank.yaml --trace examples/traces/bank-valid.json
+verispec coverage examples/bank.yaml --trace a.json,b.json --events run.json --format json
+verispec coverage examples/bank.yaml --trace traces.json --fail-under 80
+```
+
+| Flag | Default | Role |
+| --- | --- | --- |
+| `--trace` | — | Comma-separated JSON trace files |
+| `--events` | — | Comma-separated coverage-events JSON files |
+| `--fail-under` | — | Exit `1` when overall coverage % is below this value |
+| `--format` | `text` | `text`, `json`, or `sarif` |
+
+Action `implements` mappings are not required for coverage.
+
+### `drift` — spec vs implementation drift in git
+
+Each action may declare where its implementation lives:
+
+```yaml
+actions:
+  - name: transfer
+    implements:
+      - path: src/transfer.py
+      - glob: "pkg/**/adapter*.go"
+```
+
+Given a git range, flags implementation changes without a spec/signature digest
+change, and the reverse.
+
+```bash
+verispec drift examples/bank.yaml --base main --head HEAD
+verispec drift svc.yaml --range origin/main..HEAD --format sarif
+```
+
+| Flag | Role |
+| --- | --- |
+| `--base` / `--head` | Git refs to compare |
+| `--range` | `BASE..HEAD` (alternative to `--base`/`--head`) |
+| `--format` | `text`, `json`, or `sarif` |
+
+Exit `1` when drift findings are present. The GitHub Action exposes this as
+optional input `drift-check: true`.

@@ -15,10 +15,26 @@ from .model import Spec, load_spec
 from .resource_limits import run_check_isolated
 
 __all__ = [
+    "apply_liveness",
     "run_bounded_check",
     "run_check_suite",
     "merge_invariant_results",
 ]
+
+
+def apply_liveness(spec: Spec, config: CheckConfig, result: dict[str, Any]) -> dict[str, Any]:
+    """Run bounded liveness after a successful safety check."""
+    if config.skip_liveness or not spec.temporal or result.get("status") != "ok":
+        return result
+    from .temporal import check_temporal_bounded, merge_check_with_liveness
+
+    liveness = check_temporal_bounded(
+        spec,
+        bound=config.bound,
+        property_filter=config.temporal_filter,
+        timeout_ms=config.timeout_ms,
+    )
+    return merge_check_with_liveness(result, liveness)
 
 
 def _run_one_invariant(spec_path: str, config: CheckConfig, invariant: str) -> dict[str, Any]:
@@ -30,6 +46,8 @@ def _run_one_invariant(spec_path: str, config: CheckConfig, invariant: str) -> d
         memory_mb=config.memory_mb,
         solver_memory_mb=config.solver_memory_mb,
         parallel_invariants=False,
+        skip_liveness=config.skip_liveness,
+        temporal_filter=config.temporal_filter,
     )
     return run_check_isolated(spec_path, per_inv)
 
@@ -107,6 +125,8 @@ def run_bounded_check(
         result = _parallel_invariants(spec, config)
     else:
         result = run_check_isolated(str(spec.path), config)
+
+    result = apply_liveness(spec, config, result)
 
     if use_cache and cache_dir is not None:
         to_store = {k: v for k, v in result.items() if k != "from_cache"}

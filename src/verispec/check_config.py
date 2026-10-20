@@ -13,7 +13,7 @@ from . import __version__
 from .model import Spec
 from .sign import spec_digest
 
-CACHE_SCHEMA_VERSION = "1"
+CACHE_SCHEMA_VERSION = "2"
 
 DEFAULT_CACHE_DIR_ENV = "VERISPEC_CACHE_DIR"
 
@@ -29,6 +29,8 @@ class CheckConfig:
     memory_mb: int | None = None
     solver_memory_mb: int | None = None
     parallel_invariants: bool = False
+    skip_liveness: bool = False
+    temporal_filter: str | None = None
 
     def to_bmc_kwargs(self) -> dict[str, Any]:
         kwargs: dict[str, Any] = {
@@ -55,6 +57,8 @@ class CheckConfig:
             "memory_mb": self.memory_mb,
             "solver_memory_mb": self.solver_memory_mb,
             "parallel_invariants": self.parallel_invariants,
+            "skip_liveness": self.skip_liveness,
+            "temporal": self.temporal_filter,
         }
 
 
@@ -84,6 +88,8 @@ def config_from_namespace(args) -> CheckConfig:
         memory_mb=memory,
         solver_memory_mb=solver_mem,
         parallel_invariants=parallel,
+        skip_liveness=bool(getattr(args, "skip_liveness", False)),
+        temporal_filter=getattr(args, "temporal", None),
     )
 
 

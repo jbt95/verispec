@@ -20,6 +20,7 @@ from typing import Any
 
 from .codegen import to_tla
 from .model import Spec, initial_state
+from .temporal import tla_fairness_lines, tla_temporal_lines
 from .types import MapType, RecordType
 
 __all__ = ["export_tla", "run_tlc"]
@@ -102,13 +103,26 @@ def export_tla(spec: Spec) -> str:
     else:
         lines.append("Next == FALSE")
     lines.append("")
-    lines.append("Spec == Init /\\ [][Next]_vars")
+    fairness = tla_fairness_lines(spec)
+    if fairness:
+        lines.extend(fairness)
+    temporal = tla_temporal_lines(spec)
+    if temporal:
+        lines.extend(temporal)
+    spec_parts = ["Init", "[][Next]_vars"]
+    for action_name in spec.fairness.weak:
+        spec_parts.append(f"WF_{action_name}")
+    for action_name in spec.fairness.strong:
+        spec_parts.append(f"SF_{action_name}")
+    lines.append("Spec == " + " /\\ ".join(spec_parts))
     lines.append("")
     for inv in spec.invariants:
         lines.append(f"{inv['name']} == ({to_tla(inv['expr'], spec.types)})")
     if spec.invariants:
         lines.append("")
         lines.append("Invariants == " + " /\\ ".join(i["name"] for i in spec.invariants))
+    if spec.temporal:
+        lines.append("Temporal == " + " /\\ ".join(p.name for p in spec.temporal))
     lines.append("====")
     return "\n".join(lines) + "\n"
 

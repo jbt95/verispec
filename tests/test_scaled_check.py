@@ -46,6 +46,15 @@ def test_cache_key_changes_with_bound(tmp_path):
     assert k1 != k2
 
 
+def test_cache_key_includes_liveness_options():
+    spec = load_spec(BANK)
+    base = cache_key_digest(CheckConfig(bound=3).cache_key_material(spec))
+    skipped = cache_key_digest(
+        CheckConfig(bound=3, skip_liveness=True).cache_key_material(spec)
+    )
+    assert base != skipped
+
+
 def test_check_suite_deterministic_order(tmp_path):
     specs = [BANK, LEDGER]
     config = CheckConfig(bound=3)
