@@ -72,3 +72,57 @@ The expression language is a closed AST whitelist in `src/verispec/expr.py`.
 Attribute access, subscripts, imports, arbitrary calls and `eval`/`exec` are
 rejected. Widening that whitelist is a security-relevant change and needs an
 RFC plus a review by the maintainers.
+
+## Verifying release artifacts
+
+Official VeriSpec releases publish Python wheels, source distributions, an npm
+adapter archive, a CycloneDX SBOM (`verispec-sbom.cdx.json`), and GitHub build
+provenance attestations.
+
+### Python package checksum
+
+After downloading a wheel from PyPI or a GitHub release:
+
+```bash
+sha256sum verispec-*.whl
+```
+
+Compare the digest to the value recorded in the release notes or your internal
+artifact registry.
+
+### CycloneDX SBOM
+
+The SBOM is a JSON CycloneDX document bundled with each release. Inspect it
+with any CycloneDX-capable tool, or validate structure with:
+
+```bash
+python -m json.tool verispec-sbom.cdx.json > /dev/null
+```
+
+### SLSA provenance (GitHub attestations)
+
+On GitHub, open the release workflow run for the tag and download the
+**attestation** bundle, or use the GitHub CLI:
+
+```bash
+gh attestation verify dist/verispec-*.whl --owner verispec --repo verispec
+```
+
+(Replace the owner/repo if you consume a fork.)
+
+The attestation should list the same digest as the wheel you downloaded and
+tie it to the tagged release workflow.
+
+### Spec signatures (Sigstore or GPG)
+
+Repository specs can be approved with `verispec sign`. For cryptographic proof
+of approver identity, use either GPG (`--gpg`) or keyless Sigstore (`--sigstore`,
+requires the [cosign](https://github.com/sigstore/cosign) CLI and OIDC in CI).
+Verify before merge:
+
+```bash
+verispec verify-signature path/to/spec.yaml --require-cryptographic
+```
+
+Enterprise repos declare which specs require signatures and minimum guarantee
+levels in `.verispec/policy.yaml`, enforced with `verispec policy check`.

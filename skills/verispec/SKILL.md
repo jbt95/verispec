@@ -61,7 +61,9 @@ to HTML when `--format` is omitted.
 | Label | Meaning |
 | --- | --- |
 | `bounded-proved(k)` | No invariant violated in any execution up to depth *k* (not a full proof) |
+| `bounded-liveness-proved(k)` | No liveness counterexample (lasso) up to depth *k* (not a full proof) |
 | `conformance-tested` | Recorded trace replayed and every step conformed |
+| `pending-obligation` | Trace conforms but a temporal property is not yet satisfied at trace end |
 | `violation-found` | Concrete counterexample |
 | `unknown` | Solver or checker could not decide |
 
@@ -105,6 +107,12 @@ verispec check examples/bank.yaml --bound 8 --timeout 30000 --format json
 | `--invariant` | — | Only search violations of this invariant name |
 | `--timeout` | `30000` | Z3 timeout (ms) |
 | `--format` | `text` | `text`, `json`, or `sarif` |
+| `--skip-liveness` | off | Safety invariants only (skip temporal liveness) |
+| `--temporal` | — | Only check this named temporal property |
+
+When the spec declares `temporal` properties, `check` also runs **bounded
+liveness** (lasso-shaped counterexamples) after safety, unless
+`--skip-liveness`. Guarantees may include `bounded-liveness-proved(k)`.
 
 On violation, text output includes step-by-step state, action, params, and
 which invariant broke.
@@ -166,9 +174,29 @@ verispec init --template queue --lang go --force
 ```bash
 verispec sign examples/bank.yaml --approver "Jane Doe" --note "v1 review"
 verispec sign examples/bank.yaml --approver "Jane" --gpg --gpg-key ABCD1234
+verispec sign examples/bank.yaml --approver "Jane" --sigstore
 verispec verify-signature examples/bank.yaml
 verispec verify-signature examples/bank.yaml --require-cryptographic
 ```
+
+`--sigstore` uses the cosign CLI for keyless signing (optional `sigstore` extra;
+see `SECURITY.md`). GPG and Sigstore are additive; digest-only signatures still
+work unchanged.
+
+### `policy check` — enterprise governance (CI)
+
+Declare requirements in `.verispec/policy.yaml` (which specs govern which paths,
+owners, signed digests, minimum guarantee levels). Enforce in CI:
+
+```bash
+verispec policy check
+verispec policy check --format json
+verispec policy check --format sarif
+verispec policy check --policy path/to/policy.yaml --repo-root .
+```
+
+Exit `1` on policy violations (missing spec, signature, or guarantee). Exit `2`
+if the policy file itself is invalid.
 
 ### `migrate` — bump `spec_version` in file
 
@@ -334,3 +362,53 @@ verispec spec-strength examples/bank.yaml --walk-length 4 --seed 0 -v
 | `--format` | `text` | `text`, `json`, or `sarif` |
 
 Exit `1` if any mutant **survived** (spec may be too weak).
+
+### `coverage` — spec coverage from traces and test events
+
+Reports which actions, guard branches (`requires`), invariants, and parameter
+boundaries were exercised.  Traces mark successful guard paths; optional
+coverage-events JSON can record rejected guards from property tests.
+
+```bash
+verispec coverage examples/bank.yaml --trace examples/traces/bank-valid.json
+verispec coverage examples/bank.yaml --trace a.json,b.json --events run.json --format json
+verispec coverage examples/bank.yaml --trace traces.json --fail-under 80
+```
+
+| Flag | Default | Role |
+| --- | --- | --- |
+| `--trace` | — | Comma-separated JSON trace files |
+| `--events` | — | Comma-separated coverage-events JSON files |
+| `--fail-under` | — | Exit `1` when overall coverage % is below this value |
+| `--format` | `text` | `text`, `json`, or `sarif` |
+
+Action `implements` mappings are not required for coverage.
+
+### `drift` — spec vs implementation drift in git
+
+Each action may declare where its implementation lives:
+
+```yaml
+actions:
+  - name: transfer
+    implements:
+      - path: src/transfer.py
+      - glob: "pkg/**/adapter*.go"
+```
+
+Given a git range, flags implementation changes without a spec/signature digest
+change, and the reverse.
+
+```bash
+verispec drift examples/bank.yaml --base main --head HEAD
+verispec drift svc.yaml --range origin/main..HEAD --format sarif
+```
+
+| Flag | Role |
+| --- | --- |
+| `--base` / `--head` | Git refs to compare |
+| `--range` | `BASE..HEAD` (alternative to `--base`/`--head`) |
+| `--format` | `text`, `json`, or `sarif` |
+
+Exit `1` when drift findings are present. The GitHub Action exposes this as
+optional input `drift-check: true`.

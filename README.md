@@ -224,6 +224,12 @@ may be too weak). Caught mutants get a typed failure label (`missing_step`,
 verispec spec-strength examples/bank.yaml --trace examples/traces/bank-valid.json
 ```
 
+**Coverage and drift.** `verispec coverage` summarises which parts of the spec
+were exercised by traces (and optional test-event recordings), with
+`--fail-under` for CI. `verispec drift` compares a git range to per-action
+`implements` mappings and warns when code and contract move independently. The
+GitHub Action accepts `drift-check: true` for PR annotations.
+
 Not ported: RL fine-tuning, LLM judges, or GUI automation from those papers—only
 the verification-loop and perturbation-diagnosis patterns, adapted to YAML specs,
 Z3, and trace conformance.
