@@ -28,6 +28,7 @@ from typing import Any, Literal
 
 from .bmc import check as bmc_check
 from .model import Spec, apply_action, check_invariants, initial_state
+from .spec_semantic import IoCase, run_io_validation, run_reference_compare, run_vacuity_checks
 from .trace import check_trace_data
 from .values import state_to_json
 
@@ -346,6 +347,63 @@ def _final_verdict(checks: list[VerificationCheck]) -> Verdict:
     return "uncertain"
 
 
+def _semantic_strength_checks(
+    spec: Spec,
+    *,
+    io_cases: list[IoCase] | None,
+    reference: Spec | None,
+    timeout_ms: int,
+    z3_bound: int,
+    seed: int,
+) -> list[VerificationCheck]:
+    checks: list[VerificationCheck] = []
+    vacuity = run_vacuity_checks(spec, timeout_ms=min(timeout_ms, 15_000))
+    for finding in vacuity.findings:
+        if finding.status != "proved":
+            continue
+        checks.append(
+            VerificationCheck(
+                check_id=f"semantic:vacuity:{finding.code}:{finding.where}",
+                condition=finding.message,
+                kind="semantic-vacuity",
+                evidence_location=finding.where or "spec",
+                status="violated",
+                backend="z3-vacuity",
+                message=finding.message,
+            )
+        )
+    if io_cases:
+        io_report = run_io_validation(spec, io_cases, auto_mutate=True, seed=seed)
+        for result in io_report.results:
+            cid = f"semantic:io:{result.case.label}"
+            checks.append(
+                VerificationCheck(
+                    check_id=cid,
+                    condition=result.case.kind,
+                    kind="semantic-io",
+                    evidence_location=result.case.label,
+                    status="satisfied" if result.ok else "violated",
+                    backend="trace-conformance",
+                    message=result.message,
+                )
+            )
+    if reference is not None:
+        ref = run_reference_compare(spec, reference, bound=z3_bound, timeout_ms=timeout_ms)
+        status: CheckStatus = "satisfied" if ref.relation == "equivalent" else "violated"
+        checks.append(
+            VerificationCheck(
+                check_id="semantic:reference-compare",
+                condition=f"reference relation: {ref.relation}",
+                kind="semantic-reference",
+                evidence_location="reference spec",
+                status=status,
+                backend="z3-compare",
+                message=str(ref.counterexample) if ref.counterexample else ref.relation,
+            )
+        )
+    return checks
+
+
 def run_verify_loop(
     spec: Spec,
     *,
@@ -356,16 +414,15 @@ def run_verify_loop(
     z3_bound: int = 12,
     timeout_ms: int = 30000,
     seed: int = 0,
+    semantic_strength: bool = False,
+    io_cases: list[IoCase] | None = None,
+    reference: Spec | None = None,
 ) -> VerificationReport:
     """Run escalating verification; stop at the first violated check."""
     if max_rounds < 1:
         raise ValueError("max_rounds must be at least 1")
 
     started = time.monotonic()
-    checks: list[VerificationCheck] = _invariant_checks(spec)
-    if trace is not None:
-        checks.insert(0, _trace_conformance_check())
-
     cost: dict[str, Any] = {
         "rounds_used": 0,
         "backend_calls": 0,
@@ -373,6 +430,31 @@ def run_verify_loop(
         "fuzz_max_steps": fuzz_bound,
         "z3_bound": z3_bound,
     }
+    checks: list[VerificationCheck] = []
+    if semantic_strength or io_cases or reference is not None:
+        checks.extend(
+            _semantic_strength_checks(
+                spec,
+                io_cases=io_cases,
+                reference=reference,
+                timeout_ms=timeout_ms,
+                z3_bound=z3_bound,
+                seed=seed,
+            )
+        )
+        for c in checks:
+            if c.status == "violated":
+                cost["duration_ms"] = int((time.monotonic() - started) * 1000)
+                return VerificationReport(
+                    verdict="failure",
+                    checks=checks + _invariant_checks(spec),
+                    cost=cost,
+                    stopped_at=c.check_id,
+                )
+    checks.extend(_invariant_checks(spec))
+    if trace is not None:
+        checks.insert(0, _trace_conformance_check())
+
     stopped_at: str | None = None
 
     def _first_violation() -> str | None:

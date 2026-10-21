@@ -1,0 +1,20 @@
+{
+  "cases": [
+    {
+      "label": "valid-transfer",
+      "kind": "correct",
+      "before": {"balance_a": 40, "balance_b": 60},
+      "action": "transfer_a_to_b",
+      "params": {"amount": 10},
+      "after": {"balance_a": 30, "balance_b": 70}
+    },
+    {
+      "label": "negative-balance-weak-accepts",
+      "kind": "wrong_output",
+      "before": {"balance_a": 40, "balance_b": 60},
+      "action": "transfer_a_to_b",
+      "params": {"amount": 50},
+      "after": {"balance_a": -10, "balance_b": 110}
+    }
+  ]
+}

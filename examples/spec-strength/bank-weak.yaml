@@ -1,0 +1,30 @@
+spec_version: "1.0"
+name: BankWeak
+description: >
+  Weak bank spec: tautological invariant and transfer guards omit balance checks.
+  Verifier-style trace checks may still pass while semantic strength flags vacuity
+  and wrong I/O acceptance.
+vars:
+  balance_a: {type: int, min: -100, max: 200}
+  balance_b: {type: int, min: -100, max: 200}
+init:
+  balance_a: "40"
+  balance_b: "60"
+actions:
+  - name: transfer_a_to_b
+    params:
+      amount: {type: int, min: 1, max: 50}
+    requires: ["amount > 0"]
+    effects:
+      balance_a: "balance_a - amount"
+      balance_b: "balance_b + amount"
+  - name: transfer_b_to_a
+    params:
+      amount: {type: int, min: 1, max: 50}
+    requires: ["amount > 0"]
+    effects:
+      balance_b: "balance_b - amount"
+      balance_a: "balance_a + amount"
+invariants:
+  - {name: tautology, expr: "true"}
+  - {name: total_conserved, expr: "balance_a + balance_b == 100"}

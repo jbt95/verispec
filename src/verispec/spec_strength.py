@@ -16,6 +16,13 @@ from typing import Any, Literal
 
 from .expr import SpecError
 from .model import Spec, apply_action, initial_state
+from .spec_semantic import (
+    IoCase,
+    SemanticStrengthReport,
+    SemanticVerdict,
+    combine_semantic_verdict,
+    run_semantic_strength,
+)
 from .trace import check_trace_data
 from .values import state_to_json
 
@@ -23,6 +30,7 @@ __all__ = [
     "FailureKind",
     "SpecMutant",
     "SpecStrengthReport",
+    "SemanticVerdict",
     "classify_trace_failure",
     "generate_mutants_from_trace",
     "replay_steps",
@@ -99,9 +107,11 @@ class SpecStrengthReport:
     survived: int
     caught: int
     skipped: int
+    semantic: SemanticStrengthReport | None = None
+    semantic_verdict: SemanticVerdict | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        out: dict[str, Any] = {
             "base_steps": self.base_steps,
             "mutants": [m.to_dict() for m in self.mutants],
             "survived": self.survived,
@@ -109,6 +119,11 @@ class SpecStrengthReport:
             "skipped": self.skipped,
             "weak_spec": self.survived > 0,
         }
+        if self.semantic is not None:
+            out.update(self.semantic.to_dict())
+        elif self.semantic_verdict is not None:
+            out["semantic_verdict"] = self.semantic_verdict
+        return out
 
 
 def steps_from_trace(trace: list[dict[str, Any]]) -> list[tuple[str, dict[str, Any]]]:
@@ -231,6 +246,12 @@ def run_spec_strength(
     walk_length: int = 4,
     seed: int = 0,
     max_mutants: int | None = None,
+    io_cases: list[IoCase] | None = None,
+    reference: Spec | None = None,
+    semantic: bool = True,
+    auto_mutate_io: bool = True,
+    z3_bound: int = 6,
+    timeout_ms: int = 10_000,
 ) -> SpecStrengthReport:
     """Run mutation-style diagnostics on a base trace or a model-generated walk."""
     if trace is not None:
@@ -278,10 +299,32 @@ def run_spec_strength(
                     message=check.get("message", ""),
                 )
             )
+    semantic_report: SemanticStrengthReport | None = None
+    verdict: SemanticVerdict | None = None
+    if semantic or io_cases or reference is not None:
+        semantic_report = run_semantic_strength(
+            spec,
+            io_cases=io_cases,
+            reference=reference,
+            auto_mutate_io=auto_mutate_io,
+            io_seed=seed,
+            z3_bound=z3_bound,
+            timeout_ms=timeout_ms,
+        )
+        verdict = combine_semantic_verdict(
+            vacuity=semantic_report.vacuity,
+            io=semantic_report.io,
+            reference=semantic_report.reference,
+            mutation_survived=survived,
+        )
+        semantic_report.verdict = verdict
+
     return SpecStrengthReport(
         base_steps=base_steps,
         mutants=results,
         survived=survived,
         caught=caught,
         skipped=skipped,
+        semantic=semantic_report,
+        semantic_verdict=verdict,
     )
