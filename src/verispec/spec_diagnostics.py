@@ -89,11 +89,22 @@ def _locate(index: SpecSourceIndex, where: str, code: str) -> tuple[int, int]:
     return 0, 0
 
 
-def _section_line(path: str, section: str) -> tuple[int, int]:
+import functools as _functools
+
+
+@_functools.lru_cache(maxsize=64)
+def _file_lines_for(path: str) -> tuple[str, ...]:
     try:
         from pathlib import Path
 
-        for i, line in enumerate(Path(path).read_text(encoding="utf-8").splitlines()):
+        return tuple(Path(path).read_text(encoding="utf-8").splitlines())
+    except OSError:
+        return ()
+
+
+def _section_line(path: str, section: str) -> tuple[int, int]:
+    try:
+        for i, line in enumerate(_file_lines_for(path)):
             if line.strip().startswith(f"{section}:"):
                 return i, 0
     except OSError:
