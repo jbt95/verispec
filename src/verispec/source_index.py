@@ -200,7 +200,7 @@ def _resolve_import_path(lines: list[str], line_no: int, base: Path) -> str | No
     return None
 
 
-@functools.lru_cache(maxsize=128)
+@functools.lru_cache(maxsize=512)
 def _file_lines_cached(path: str, mtime_ns: int) -> tuple[str, ...]:
     try:
         return tuple(Path(path).read_text(encoding="utf-8").splitlines())

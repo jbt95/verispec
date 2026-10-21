@@ -215,7 +215,7 @@ def _vars_in_expr(expr: str, state_names: set[str]) -> set[str]:
     return found
 
 
-@functools.cache
+@functools.lru_cache(maxsize=4096)
 def _moves_independent(
     r1: frozenset[str], w1: frozenset[str], r2: frozenset[str], w2: frozenset[str]
 ) -> bool:

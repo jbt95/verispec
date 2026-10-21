@@ -610,7 +610,7 @@ def _rename_expr(expr: str, mapping: dict[str, str]) -> str:
     return ast.unparse(tree)
 
 
-@functools.lru_cache(maxsize=128)
+@functools.lru_cache(maxsize=512)
 def _load_spec_cached(resolved: str, mtime_ns: int, size: int, display_path: str) -> Spec:
     """Load a spec file; cache key includes path metadata so edits are visible."""
     try:
