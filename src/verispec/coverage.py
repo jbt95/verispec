@@ -108,9 +108,11 @@ def _param_index(report: CoverageReport) -> dict[tuple[str, str], dict[str, Any]
 
 def merge_coverage(base: CoverageReport, other: CoverageReport) -> CoverageReport:
     """Merge hits from another report into base (mutates base)."""
+    base_set = set(base.sources)
     for src in other.sources:
-        if src not in base.sources:
+        if src not in base_set:
             base.sources.append(src)
+            base_set.add(src)
     action_index = _action_index(base)
     for a in other.actions:
         if a.get("covered"):
