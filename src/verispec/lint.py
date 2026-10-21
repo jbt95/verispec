@@ -89,6 +89,31 @@ def lint_spec(spec: Spec) -> dict[str, Any]:
             "run `verispec migrate` to move it to v1.0",
         )
 
+    # The bounds on a map's values are documentation.  The checker reads
+    # the bounds from the *value type*, and the value that an absent slot
+    # reads as is the value type's minimum - so `value_min` changes
+    # nothing at all, and a contract that relies on it is relying on
+    # something that was never checked.
+    for name, var in spec.vars.items():
+        raw = var.raw if isinstance(var.raw, dict) else {}
+        if "value_min" not in raw and "value_max" not in raw:
+            continue
+        bounds = []
+        if "value_min" in raw:
+            bounds.append(f"value_min: {raw['value_min']}")
+        if "value_max" in raw:
+            bounds.append(f"value_max: {raw['value_max']}")
+        add(
+            "info",
+            "documentation-value-bounds",
+            f"the bounds on the values of {name} ({', '.join(bounds)}) are "
+            f"documentation: the checker does not read them.  Put them on the "
+            f"value type - `value: {{type: int, min: ..., max: ...}}` - if you "
+            f"want them checked, and remember that the value an absent slot "
+            f"reads as is the value type's minimum",
+            name,
+        )
+
     for inv in spec.invariants:
         expr = inv["expr"].strip()
         if _is_tautology(expr):

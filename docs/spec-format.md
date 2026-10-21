@@ -227,7 +227,7 @@ balances: {type: map, key: int, key_min: 0, key_max: 7, value: int, value_min: 0
 | `value` | yes | Value type: any scalar. |
 | `key_min`, `key_max` | for `int` keys | The inclusive range of legal keys. |
 | `key_domain` | for `str` keys | The explicit list of legal keys. |
-| `value_min`, `value_max` | no | Documentation bounds on values. |
+| `value_min`, `value_max` | no | Documentation bounds on values.  The checker does not read them: `verispec lint` says so.  Put the bounds on the value type (`value: {type: int, min: 0, max: 10}`) if you want them checked, and remember that the value an absent slot reads as is the value type's minimum. |
 | `max_size` | no | Capacity. Defaults to the size of the key domain. |
 
 ### Sets

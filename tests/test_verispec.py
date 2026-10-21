@@ -202,3 +202,72 @@ def test_generated_python_fails_buggy_ledger_adapter(tmp_path):
     m.ADAPTER_FACTORY = LedgerAdapterBuggy
     with pytest.raises(Exception):
         m.test_verispec_conformance()
+
+
+def test_the_lint_says_that_value_bounds_are_documentation(tmp_path):
+    """`value_min` changes nothing, and a contract that relies on it does.
+
+    The bounds the checker reads are the ones on the *value type*, and the
+    value an absent slot reads as is the value type's minimum.  A map that
+    declares `value_min` looks like it is bounding its values and is not.
+    """
+    from verispec.lint import lint_spec
+    from verispec.model import load_spec
+
+    path = tmp_path / "bounds.yaml"
+    path.write_text(
+        """
+spec_version: "1.1"
+name: Bounds
+vars:
+  m: {type: map, key: int, key_min: 0, key_max: 1, value: int, value_min: -1, value_max: 5, max_size: 2}
+init:
+  m: {}
+actions:
+  - name: add
+    params:
+      i: {type: int, min: 0, max: 1}
+    effects:
+      m: "map_set(m, i, 1)"
+invariants:
+  - {name: ok, expr: "len(m) <= 2"}
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    findings = lint_spec(load_spec(path))["findings"]
+    codes = {f["code"] for f in findings}
+    assert "documentation-value-bounds" in codes
+    finding = next(f for f in findings if f["code"] == "documentation-value-bounds")
+    assert finding["level"] == "info"
+    assert "value type" in finding["message"]
+    assert finding["where"] == "m"
+
+
+def test_a_map_with_bounds_on_the_value_type_is_not_flagged(tmp_path):
+    from verispec.lint import lint_spec
+    from verispec.model import load_spec
+
+    path = tmp_path / "typed.yaml"
+    path.write_text(
+        """
+spec_version: "1.1"
+name: Typed
+vars:
+  m: {type: map, key: int, key_min: 0, key_max: 1, value: {type: int, min: -1, max: 5}, max_size: 2}
+init:
+  m: {}
+actions:
+  - name: add
+    params:
+      i: {type: int, min: 0, max: 1}
+    effects:
+      m: "map_set(m, i, 1)"
+invariants:
+  - {name: ok, expr: "len(m) <= 2"}
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    findings = lint_spec(load_spec(path))["findings"]
+    assert "documentation-value-bounds" not in {f["code"] for f in findings}
