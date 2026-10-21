@@ -122,6 +122,23 @@ def test_check_trace(capsys):
     assert "step 1" in out
 
 
+def test_check_trace_json_keeps_pending_distinct_from_violation(capsys, tmp_path):
+    """A trace that has not reached the end of a temporal obligation is not
+    a broken implementation, and a JSON consumer must be able to tell the
+    two apart."""
+    spec = ROOT / "tests" / "fixtures" / "temporal-stutter.yaml"
+    trace = tmp_path / "partial.json"
+    trace.write_text(
+        json.dumps([{"action": "init", "params": {}, "state": {"phase": "pending"}}])
+    )
+    code, out, _ = run(capsys, "check-trace", str(spec), str(trace), "--format", "json")
+    assert code == EXIT_VIOLATION
+    payload = json.loads(out)
+    assert payload["status"] == "pending"
+    assert payload["guarantee"] == "pending-obligation"
+    assert payload["reason"] == "pending-temporal"
+
+
 def test_spec_error_exit_code(capsys, tmp_path):
     bad = tmp_path / "bad.yaml"
     bad.write_text("name: X\nvars:\n  a: {type: int}\nactions:\n  - name: go\n    effects:\n      a: 'nope + 1'\n")

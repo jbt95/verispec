@@ -14,8 +14,13 @@ __all__ = ["to_sarif"]
 TOOL_NAME = "verispec"
 
 
-def to_sarif(result: dict[str, Any], spec_path: str = "") -> dict[str, Any]:
-    """Convert a check result into a SARIF document."""
+def to_sarif(result: dict[str, Any], spec_path: str = "", level: str = "error") -> dict[str, Any]:
+    """Convert a check result into a SARIF document.
+
+    `level` is the severity of the findings.  A trace that has not got to
+    the end of a temporal obligation yet is not a defect, and saying so in
+    the SARIF level keeps a code-scanning consumer from filing it as one.
+    """
     violations = result.get("violations") or []
     rules: dict[str, dict[str, Any]] = {}
     results: list[dict[str, Any]] = []
@@ -32,12 +37,12 @@ def to_sarif(result: dict[str, Any], spec_path: str = "") -> dict[str, Any]:
                         "A violation means the implementation broke the contract."
                     )
                 },
-                "defaultConfiguration": {"level": "error"},
+                "defaultConfiguration": {"level": level},
             }
         results.append(
             {
                 "ruleId": name,
-                "level": "error",
+                "level": level,
                 "message": {
                     "text": (
                         f"{name} violated at step {v.get('step')}: "

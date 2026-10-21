@@ -224,7 +224,12 @@ def cmd_check_trace(args) -> int:
         "command": "check-trace",
         "spec": _spec_payload(spec),
         "trace_path": str(args.trace),
-        "status": "ok" if result["ok"] else "violation",
+        # The trace checker distinguishes "the trace broke an invariant"
+        # from "the trace has not got to the end of a temporal obligation
+        # yet".  Keep that distinction: a consumer that cannot tell a
+        # broken implementation from an unfinished trace will treat a
+        # half-finished trace as a defect.
+        "status": "ok" if result["ok"] else result.get("status", "violation"),
         "guarantee": result.get("guarantee"),
         "reason": result.get("reason"),
         "message": result.get("message"),
@@ -252,6 +257,7 @@ def cmd_check_trace(args) -> int:
                     "guarantee": payload.get("guarantee"),
                 },
                 str(args.spec),
+                level="note" if payload["status"] == "pending" else "error",
             )
         )
     else:
