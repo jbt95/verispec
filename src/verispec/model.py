@@ -673,9 +673,10 @@ def apply_action(
     from .expr import eval_python
 
     action = spec.action(action_name)
+    tenv = spec.tenv(action)
     env = {**state, **params}
     for r in action.requires:
-        if not eval_python(r, env, spec.tenv(action)):
+        if not eval_python(r, env, tenv):
             raise SpecError(f"precondition failed for {action_name}: {r}")
     nxt = dict(state)
     for k, e in action.effects.items():
@@ -683,10 +684,10 @@ def apply_action(
         if isinstance(var.type, RecordType):
             rec = dict(state[k])
             for fname, fexpr in e.items():
-                rec[fname] = eval_python(fexpr, env, spec.tenv(action))
+                rec[fname] = eval_python(fexpr, env, tenv)
             nxt[k] = rec
         else:
-            nxt[k] = eval_python(e, env, spec.tenv(action))
+            nxt[k] = eval_python(e, env, tenv)
     return nxt
 
 
