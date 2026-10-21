@@ -254,7 +254,11 @@ class Spec:
     @property
     def types(self) -> dict[str, TypeSpec]:
         """Type of every state variable."""
-        return {n: v.type for n, v in self.vars.items()}
+        cache = getattr(self, "_types_cache", None)
+        if cache is None:
+            cache = {n: v.type for n, v in self.vars.items()}
+            self._types_cache = cache
+        return cache
 
     def action(self, name: str) -> Action:
         cache = getattr(self, "_action_map", None)
@@ -575,6 +579,8 @@ def _apply_imports(spec: Spec, path: str) -> None:
     spec.vars = {**{n: Var(n, r) for n, r in merged_vars.items()}, **spec.vars}
     spec.init = {**merged_init, **spec.init}
     spec.actions = [Action(a) for a in merged_actions] + spec.actions
+    spec._types_cache = None
+    spec._action_map = None
     spec.invariants = merged_invariants + spec.invariants
     from .temporal import FairnessSpec, TemporalProperty, parse_fairness, parse_temporal_list
 
