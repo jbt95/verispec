@@ -30,7 +30,7 @@ from .types import EnumType, MapType, RecordType, SeqType, SetType
 
 __all__ = ["prove", "format_result", "GUARANTEE_PROVED"]
 
-GUARANTEE_PROVED = "proved"
+from .guarantees import GUARANTEE_PROVED  # noqa: F401  (re-exported)
 
 _TEMPORAL_NOTE = (
     "Safety invariants only: temporal liveness properties in the spec are not proved "
@@ -148,12 +148,15 @@ def prove(
                 if artifact
                 else (
                     "k-induction could not close: found a counterexample to the "
-                    "inductive step. Strengthen invariants or use a larger k."
+                    "inductive step. "
+                    + (step.get("hint") or "Strengthen invariants or use a larger k.")
                 )
             ),
             "induction_cex": step.get("trace"),
             "violations": step.get("violations"),
             "violated": step.get("violated"),
+            "diagnosis": step.get("diagnosis"),
+            "diagnosis_detail": step.get("diagnosis_detail"),
         }
     return {
         "status": "unknown",
@@ -163,6 +166,109 @@ def prove(
         "reason": step.get("reason", "solver"),
         "message": step.get("message", "k-induction step was inconclusive"),
     }
+
+
+def _classify_cti(spec: Spec, trace: list[dict[str, Any]], depth: int) -> dict[str, Any]:
+    """Say what kind of gap the counterexample to induction is.
+
+    "Strengthen your invariants" is advice that is wrong most of the time.
+    Two gaps account for most of the counterexamples a contract hits, and
+    both are visible in the hypothesis states:
+
+    * a value outside the declared range of its variable - the bounds of a
+      state variable are documentation, not axioms, so the hypothesis may
+      hold a counter that no implementation would ever produce;
+    * two maps that describe the same things but disagree about which -
+      the hypothesis may hold a state in which `todo_notes_len` has an
+      entry for a todo that `todo_status` does not have.
+
+    Both are fixed by *stating* the rule, and the diagnosis says which
+    rule to state.
+    """
+    out_of_range: list[str] = []
+    key_set_mismatch: list[str] = []
+
+    for entry in trace:
+        if entry["step"] >= depth:
+            continue
+        state = entry.get("state") or {}
+        for name, var in spec.vars.items():
+            if name not in state:
+                continue
+            value = state[name]
+            lo = getattr(var.type, "min", None)
+            hi = getattr(var.type, "max", None)
+            if isinstance(value, int) and not isinstance(value, bool):
+                if (lo is not None and value < lo) or (hi is not None and value > hi):
+                    out_of_range.append(
+                        f"{name} = {value} (the declared range is "
+                        f"{lo if lo is not None else '-inf'}..{hi if hi is not None else 'inf'})"
+                    )
+        maps = [
+            (n, v)
+            for n, v in spec.vars.items()
+            if isinstance(v.type, (MapType, SetType)) and n in state
+        ]
+        for i in range(len(maps)):
+            for j in range(i + 1, len(maps)):
+                (an, av), (bn, bv) = maps[i], maps[j]
+                if getattr(av.type, "domain", None) != getattr(bv.type, "domain", None):
+                    continue
+                akeys = set(_json_keys(state[an]))
+                bkeys = set(_json_keys(state[bn]))
+                if akeys != bkeys:
+                    only_a = sorted(akeys - bkeys)
+                    only_b = sorted(bkeys - akeys)
+                    detail = []
+                    if only_a:
+                        detail.append(f"{an} has {only_a} and {bn} does not")
+                    if only_b:
+                        detail.append(f"{bn} has {only_b} and {an} does not")
+                    key_set_mismatch.append(f"{an} and {bn}: " + "; ".join(detail))
+
+    if out_of_range:
+        return {
+            "diagnosis": "hypothesis-out-of-range",
+            "detail": sorted(set(out_of_range)),
+            "hint": (
+                "the hypothesis of the induction holds a value outside the "
+                "declared range of a variable, because the bounds of a state "
+                "variable are documentation and not axioms.  If the "
+                "implementation really keeps the value inside that range, "
+                "state it as an invariant (for example "
+                "`reminders_sent >= 0`) - no invariant can exclude a state "
+                "the contract does not forbid."
+            ),
+        }
+    if key_set_mismatch:
+        return {
+            "diagnosis": "hypothesis-key-set-mismatch",
+            "detail": sorted(set(key_set_mismatch)),
+            "hint": (
+                "the hypothesis of the induction holds two maps that describe "
+                "the same things but disagree about which ones.  State the "
+                "rule that ties them together as an invariant (for example "
+                "`(0 in todo_notes_len) == (0 in todo_status)`), or the "
+                "induction cannot close."
+            ),
+        }
+    return {
+        "diagnosis": "genuine-inductive-gap",
+        "detail": [],
+        "hint": (
+            "the hypothesis satisfies the invariants and the successor does "
+            "not: the invariant is not inductive.  Add the rule that makes it "
+            "inductive, or use a larger k."
+        ),
+    }
+
+
+def _json_keys(value: Any) -> list[str]:
+    if isinstance(value, dict):
+        return [str(k) for k in value]
+    if isinstance(value, list):
+        return [str(v) for v in value]
+    return []
 
 
 def _wellformed(var, slot: dict[str, Any]):
@@ -350,12 +456,16 @@ def _inductive_step(
             "artifact": True,
         }
 
+    diagnosis = _classify_cti(spec, trace, depth)
     return {
         "status": "violation",
         "depth": depth,
         "trace": trace,
         "violations": violations,
         "violated": [v["name"] for v in violations],
+        "diagnosis": diagnosis["diagnosis"],
+        "diagnosis_detail": diagnosis["detail"],
+        "hint": diagnosis["hint"],
     }
 
 

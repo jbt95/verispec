@@ -36,8 +36,7 @@ from .values import value_to_json
 __all__ = ["check", "format_result", "GUARANTEE_BOUNDED"]
 
 
-GUARANTEE_BOUNDED = "bounded-proved(k)"
-
+from .guarantees import GUARANTEE_BOUNDED, scope_note  # noqa: F401  (re-exported)
 
 # --------------------------------------------------------------------------
 # state encoding
@@ -334,11 +333,7 @@ def _encode_transition(
         params_for_actions[ai] = action_params
         env = {**cur_bindings, **penv}
         tenv = spec.tenv(a)
-        req = (
-            z3.And(*[to_z3(r, env, tenv) for r in a.requires])
-            if a.requires
-            else z3.BoolVal(True)
-        )
+        req = z3.And(*[to_z3(r, env, tenv) for r in a.requires]) if a.requires else z3.BoolVal(True)
         eff: list = []
         for vn, v in spec.vars.items():
             if vn not in a.effects:
@@ -511,9 +506,7 @@ def _check_after_preflight_layered(
             continue
         solver.push()
         solver.add(z3.Or(*viols))
-        r = _result_from_solver(
-            spec, solver, k, states, choices, params_by_step, invariant_filter
-        )
+        r = _result_from_solver(spec, solver, k, states, choices, params_by_step, invariant_filter)
         solver.pop()
         if r["status"] == "violation":
             r["max_bound"] = bound
@@ -575,9 +568,7 @@ def _check_after_preflight_incremental(
             continue
         solver.push()
         solver.add(z3.Or(*viols))
-        r = _result_from_solver(
-            spec, solver, k, states, choices, params_by_step, invariant_filter
-        )
+        r = _result_from_solver(spec, solver, k, states, choices, params_by_step, invariant_filter)
         solver.pop()
         if r["status"] == "violation":
             r["max_bound"] = bound
@@ -630,7 +621,11 @@ def _preflight(spec: Spec, bound: int, timeout_ms: int) -> dict[str, Any] | None
 
 
 def _constant_int(node: ast.AST) -> int | None:
-    if isinstance(node, ast.Constant) and isinstance(node.value, int) and not isinstance(node.value, bool):
+    if (
+        isinstance(node, ast.Constant)
+        and isinstance(node.value, int)
+        and not isinstance(node.value, bool)
+    ):
         return node.value
     if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd)):
         value = _constant_int(node.operand)
@@ -719,7 +714,9 @@ def _check_one(
     )
 
 
-def _decode_trace(spec: Spec, model, states, bound: int, choices, params_by_step) -> list[dict[str, Any]]:
+def _decode_trace(
+    spec: Spec, model, states, bound: int, choices, params_by_step
+) -> list[dict[str, Any]]:
     """Turn a Z3 model into a concrete counterexample trace."""
     nact = len(spec.actions)
     trace: list[dict[str, Any]] = []
@@ -860,12 +857,14 @@ def _find_violations(
 def format_result(spec: Spec, result: dict[str, Any]) -> str:
     """Human readable rendering of a check result."""
     if result["status"] == "ok":
+        guarantee = result.get("guarantee", GUARANTEE_BOUNDED)
         return (
             f"{result['message']}  (bounded claim only, not a proof for all depths; "
-            f"guarantee: {result.get('guarantee', GUARANTEE_BOUNDED)})"
+            f"guarantee: {guarantee}; {scope_note(guarantee)})"
         )
     if result["status"] != "violation":
-        return f"{result['message']}  (guarantee: {result.get('guarantee', 'unknown')})"
+        guarantee = result.get("guarantee", "unknown")
+        return f"{result['message']}  (guarantee: {guarantee}; {scope_note(guarantee)})"
     lines = [result["message"]]
     for entry in result.get("trace", []):
         lines.append(f"  step {entry['step']}: state={entry['state']}")

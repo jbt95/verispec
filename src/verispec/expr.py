@@ -267,6 +267,12 @@ def infer_type(node: ast.AST, tenv: dict[str, TypeSpec]) -> TypeSpec:
         bt = infer_type(node.body, tenv)
         ot = infer_type(node.orelse, tenv)
         if not T.same_type(bt, ot):
+            # An enum value *is* a string: the two are interchangeable in
+            # the interpreter, in Z3 and in every generated language, so a
+            # conditional that mixes them is fine.  The result is the enum
+            # when either branch is one.
+            if {bt.kind, ot.kind} == {"str", "enum"}:
+                return bt if bt.kind == "enum" else ot
             raise SpecError(
                 f"if/else branches have different types: {type_name(bt)} vs {type_name(ot)}"
             )

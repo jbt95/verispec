@@ -27,7 +27,14 @@ __all__ = [
 
 DEFAULT_POLICY_PATH = Path(".verispec") / "policy.yaml"
 
-GuaranteeLevel = Literal["present", "signed-digest", "cryptographic", "bounded-proved", "conformance-tested"]
+GuaranteeLevel = Literal[
+    "present",
+    "signed-digest",
+    "cryptographic",
+    "bounded-proved",
+    "bounded-liveness-proved",
+    "conformance-tested",
+]
 
 
 @dataclass
@@ -75,7 +82,8 @@ _GUARANTEE_ORDER: dict[GuaranteeLevel, int] = {
     "signed-digest": 1,
     "cryptographic": 2,
     "bounded-proved": 3,
-    "conformance-tested": 4,
+    "bounded-liveness-proved": 4,
+    "conformance-tested": 5,
 }
 
 
@@ -315,6 +323,28 @@ def _check_entry(repo_root: Path, entry: PolicyEntry) -> list[PolicyFinding]:
                     (
                         f"bounded model check did not reach ok at bound {entry.bound}: "
                         f"{result.get('message', result.get('status'))}"
+                    ),
+                    str(spec_path),
+                )
+            )
+
+    if _GUARANTEE_ORDER[entry.min_guarantee] >= _GUARANTEE_ORDER["bounded-liveness-proved"]:
+        # The same check the CLI runs, so that the policy and the pipeline
+        # are not looking at different evidence.
+        from .temporal import check_temporal_bounded
+
+        liveness = check_temporal_bounded(
+            spec, bound=entry.bound, timeout_ms=30_000
+        )
+        if liveness.get("status") != "ok":
+            findings.append(
+                PolicyFinding(
+                    entry.name,
+                    "guarantee-bounded-liveness-proved",
+                    "error",
+                    (
+                        f"bounded liveness check did not reach ok at bound "
+                        f"{entry.bound}: {liveness.get('message', liveness.get('status'))}"
                     ),
                     str(spec_path),
                 )

@@ -6,6 +6,7 @@ clear scope. The MCP `list_invariants` response uses `not-checked` to say
 that listing an invariant did not run a check—that is not a guarantee label.
 
 - [The labels](#the-labels)
+- [What a label is about](#what-a-label-is-about)
 - [What each label proves](#what-each-label-proves)
 - [The bounded claim](#the-bounded-claim)
 - [Reading a result](#reading-a-result)
@@ -40,7 +41,10 @@ approved digest.
 | --- | --- | --- |
 | `bounded-proved(k)` | `verispec check` | No violation up to depth *k*. |
 | `proved` | `verispec prove`, `verispec check --unbounded` | Invariants proved for all depths (k-induction). |
+| `bounded-liveness-proved(k)` | `verispec check` (a spec with `temporal:`) | No liveness counterexample (lasso) up to depth *k*. |
+| `concurrent-explored(k)` | `verispec check-concurrent` | No violation in any explored interleaving up to *k*. |
 | `conformance-tested` | `verispec check-trace`, `verispec monitor` | A recorded run conformed. |
+| `pending-obligation` | `verispec check-trace` (a spec with `temporal:`) | The trace conformed, but a temporal obligation is not satisfied at its end. |
 | `signature-verified` | `verispec verify-signature` | The spec still matches the digest a human approved. |
 | `violation-found` | `verispec check`, `verispec check-trace` | A concrete counterexample exists. |
 | `unknown` | `verispec check` | The checker could not decide. |
@@ -55,6 +59,28 @@ than a `guarantee` field: `verified` when a GPG signature is present and
 valid, `digest-match` when only the digest matches, and `digest-mismatch`,
 `missing-signature` or `gpg-invalid` otherwise. Those reasons are the
 `signature-verified` outcome and its failures.
+
+## What a label is about
+
+A label says what was *established*, and every label is also scoped: it is
+about the **contract**, about a **recorded trace**, or about a **digest**.
+
+The distinction matters.  `bounded-proved(k)` is a statement about the
+contract: it says the contract is consistent up to depth *k*.  It says
+nothing about the implementation - that is what `conformance-tested` is for.
+A reader who does not know that will read `bounded-proved(8)` as a statement
+about the code, which it is not.
+
+The command output says so too, in as many words:
+
+```console
+$ verispec check specs/orders.yaml --bound 8
+no violation up to bound 8  (bounded claim only, not a proof for all depths;
+guarantee: bounded-proved(8); a statement about the contract, not about the implementation)
+```
+
+`verispec self-check` audits this: every label is defined in exactly one
+place, every label is documented, and every label has a scope.
 
 ## What each label proves
 

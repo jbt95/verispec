@@ -27,7 +27,7 @@ from .values import json_to_value, state_from_json, value_to_json
 
 __all__ = ["check_trace", "load_trace", "GUARANTEE_CONFORMANCE"]
 
-GUARANTEE_CONFORMANCE = "conformance-tested"
+from .guarantees import GUARANTEE_CONFORMANCE  # noqa: F401  (re-exported)
 
 
 def load_trace(trace_path: str | Path) -> list[dict[str, Any]]:
@@ -156,7 +156,9 @@ def check_trace_data(spec: Spec, trace: list[dict[str, Any]]) -> dict[str, Any]:
                 f"(prev={prev_state}, params={params})",
             )
         if error:
-            return _fail(i, "evaluation-error", f"cannot evaluate action {action} at step {i}: {error}")
+            return _fail(
+                i, "evaluation-error", f"cannot evaluate action {action} at step {i}: {error}"
+            )
         if expected != state:
             return _fail(
                 i,

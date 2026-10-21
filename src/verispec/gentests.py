@@ -153,7 +153,7 @@ def gen_python(spec: Spec) -> str:
 import json
 import os
 
-from hypothesis import HealthCheck, assume, given, settings, strategies as st
+from hypothesis import HealthCheck, assume, given, seed as hypothesis_seed, settings, strategies as st
 
 from verispec.expr import eval_python
 from verispec.model import apply_action, check_invariants, initial_state, load_spec_data
@@ -237,8 +237,22 @@ def test_verispec_conformance(data):
         prev = dict(state)
 
 
+def run_verispec_conformance(seed=None, max_examples=60):
+    """Run the conformance property test, optionally with a fixed seed.
+
+    A suite that asserts the property test *fails* on a broken implementation
+    needs a deterministic walk: a random one reaches the bug only sometimes.
+    """
+    if seed is None:
+        test_verispec_conformance()
+        return
+    with hypothesis_seed(seed):
+        settings(max_examples=max_examples, deadline=None,
+                 suppress_health_check=list(HealthCheck))(test_verispec_conformance)()
+
+
 if __name__ == "__main__":
-    test_verispec_conformance()
+    run_verispec_conformance()
     print("verispec generated tests: OK")
 '''
     return header + body.replace("__BLOB__", blob).replace("__ACTIONS__", actions)
@@ -586,9 +600,14 @@ def _gen_js_family(spec: Spec, adapter_import: str | None, javascript: bool) -> 
     )
     lines.append("")
     if javascript:
-        lines.append("export function runConformance(makeAdapter) {")
+        lines.append("export function runConformance(makeAdapter, options) {")
     else:
-        lines.append("export function runConformance(makeAdapter: () => any): void {")
+        lines.append(
+            "export function runConformance("
+            "makeAdapter: () => any,"
+            " options?: { seed?: number; numRuns?: number },"
+            "): void {"
+        )
     lines.append("  fc.assert(")
     lines.append("    fc.property(fc.array(STEP, { maxLength: 25 }), (steps) => {")
     lines.append("      const adapter = makeAdapter();")
@@ -616,6 +635,14 @@ def _gen_js_family(spec: Spec, adapter_import: str | None, javascript: bool) -> 
     lines.append("      }")
     lines.append("      return true;")
     lines.append("    }),")
+    # A suite that asserts the property test *fails* on a broken
+    # implementation needs a deterministic walk: a random one reaches the bug
+    # only sometimes.  The seed is optional, so the default is unchanged.
+    lines.append(
+        "    options !== undefined && options.seed !== undefined"
+        " ? { seed: options.seed, numRuns: options.numRuns }"
+        " : undefined,"
+    )
     lines.append("  );")
     lines.append("}")
     lines.append("")

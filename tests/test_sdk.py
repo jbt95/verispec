@@ -94,7 +94,11 @@ def test_the_javascript_dialect_has_no_type_syntax():
     assert "<V>" not in js
     assert "as any" not in js
     # but it keeps the same contract and the same expressions
-    assert "export function runConformance(makeAdapter)" in js
+    assert "export function runConformance(makeAdapter, options)" in js
+    # both dialects accept a fixed seed, so that a suite which asserts the
+    # property test *fails* is deterministic
+    assert "options.seed" in js
+    assert "options.seed" in ts
     assert "export const SPEC_INIT" in js
     assert "total_conserved" in js
     assert "fast-check" in js

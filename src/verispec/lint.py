@@ -25,6 +25,43 @@ __all__ = ["lint_spec"]
 _TAUTOLOGY = re.compile(r"^\s*(true|1\s*==\s*1|not\s+false)\s*$", re.IGNORECASE)
 
 
+def _string_constants(expression: str) -> list[str]:
+    """The string literals in an expression."""
+    try:
+        tree = parse_expr(expression)
+    except Exception:
+        return []
+    return [
+        node.value
+        for node in ast.walk(tree.body)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    ]
+
+
+def _check_quoted_parameters(spec: Spec, action, add) -> None:
+    """Catch a string literal that was meant to be a parameter.
+
+    `"old_tag"` and `old_tag` differ by two characters, and the difference
+    is invisible in the failure: the expression simply compares against the
+    string "old_tag" instead of the parameter's value.  The contract is
+    still valid - it just says something else from what was meant.
+    """
+    if not action.params:
+        return
+    names = set(action.params)
+    expressions = list(action.requires) + [str(e) for e in action.effects.values()]
+    for expression in expressions:
+        for literal in _string_constants(expression):
+            if literal in names:
+                add(
+                    "warning",
+                    "quoted-parameter",
+                    f'action {action.name}: the string "{literal}" looks like the '
+                    f"parameter {literal}: if you meant the parameter, drop the quotes",
+                    action.name,
+                )
+
+
 def lint_spec(spec: Spec) -> dict[str, Any]:
     """Lint a spec and return the findings."""
     findings: list[dict[str, Any]] = []
@@ -70,13 +107,24 @@ def lint_spec(spec: Spec) -> dict[str, Any]:
             )
 
     for a in spec.actions:
+        _check_quoted_parameters(spec, a, add)
         if not a.effects:
-            add(
-                "warning",
-                "no-effects",
-                f"action {a.name} has no effects: it cannot change the state",
-                a.name,
-            )
+            if a.stutter:
+                # The action is meant to change nothing, and says so.
+                add(
+                    "info",
+                    "stutter",
+                    f"action {a.name} is a stutter: it changes nothing on purpose",
+                    a.name,
+                )
+            else:
+                add(
+                    "warning",
+                    "no-effects",
+                    f"action {a.name} has no effects: it cannot change the state "
+                    f"(mark it 'stutter: true' if that is on purpose)",
+                    a.name,
+                )
         elif not a.requires:
             add(
                 "info",

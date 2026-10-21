@@ -34,6 +34,7 @@ from .cli_commands import (
     cmd_refines,
     cmd_registry,
     cmd_report,
+    cmd_self_check,
     cmd_sign,
     cmd_spec_strength,
     cmd_validate,
@@ -341,8 +342,12 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--root", default=".", help="repository root (default: cwd)")
     sp.add_argument("--bound", type=int, default=6, help="BMC / liveness bound for timed checks")
     sp.add_argument("--prove-k", type=int, default=2, help="k-induction parameter for prove bench")
-    sp.add_argument("--concurrent-bound", type=int, default=3, help="bound for check-concurrent bench")
-    sp.add_argument("--jobs", type=int, default=0, help="parallel jobs for warm check-suite bench (0 = auto)")
+    sp.add_argument(
+        "--concurrent-bound", type=int, default=3, help="bound for check-concurrent bench"
+    )
+    sp.add_argument(
+        "--jobs", type=int, default=0, help="parallel jobs for warm check-suite bench (0 = auto)"
+    )
     sp.add_argument("--repeats", type=int, default=2, help="median over this many timed runs")
     sp.add_argument("--quick", action="store_true", help="subset of cases (faster)")
     sp.add_argument("-o", "--output", help="write JSON results to a file")
@@ -488,7 +493,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="do not synthesize wrong-output cases from correct I/O examples",
     )
     sp.add_argument("--z3-bound", type=int, default=6, help="Z3 depth for reference comparison")
-    sp.add_argument("--timeout", type=int, default=10000, help="Z3 timeout in ms for semantic checks")
+    sp.add_argument(
+        "--timeout", type=int, default=10000, help="Z3 timeout in ms for semantic checks"
+    )
     sp.add_argument("-v", "--verbose", action="store_true", help="list caught mutants too")
     _add_format(sp)
     sp.set_defaults(func=cmd_spec_strength)
@@ -505,6 +512,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_format(sp)
     sp.set_defaults(func=cmd_coverage)
+
+    sp = sub.add_parser(
+        "self-check",
+        help="check that the tool's output cannot claim more than it checked",
+    )
+    sp.add_argument("--root", default=".", help="repository root (default: cwd)")
+    _add_format(sp)
+    sp.set_defaults(func=cmd_self_check)
 
     sp = sub.add_parser("drift", help="detect spec vs implementation drift in a git range")
     sp.add_argument("spec")

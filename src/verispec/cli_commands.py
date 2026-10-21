@@ -657,7 +657,13 @@ def cmd_bench(args) -> int:
             Path(args.baseline).resolve(),
             factor=args.factor,
         )
-        payload = {"tool": "verispec", "command": "bench", "smoke": True, "ok": ok, "failures": failures}
+        payload = {
+            "tool": "verispec",
+            "command": "bench",
+            "smoke": True,
+            "ok": ok,
+            "failures": failures,
+        }
         if args.format == "json":
             _print_json(payload)
         elif ok:
@@ -954,6 +960,52 @@ def cmd_coverage(args) -> int:
     return EXIT_OK
 
 
+def cmd_self_check(args) -> int:
+    """Check that the tool's output cannot claim more than it checked."""
+    from .sarif import to_sarif
+    from .selfcheck import run_self_check
+
+    result = run_self_check(root=args.root)
+    payload = {
+        "tool": "verispec",
+        "version": __version__,
+        "command": "self-check",
+        "status": result["status"],
+        "guarantee": result["guarantee"],
+        "message": result["message"],
+        "checks": result["checks"],
+        "findings": result["findings"],
+    }
+    if args.format == "json":
+        _print_json(payload)
+    elif args.format == "sarif":
+        _print_json(
+            to_sarif(
+                {
+                    "status": payload["status"],
+                    "violations": [
+                        {
+                            "name": f["check"],
+                            "kind": "self-check",
+                            "expr": f["detail"],
+                            "step": 0,
+                        }
+                        for f in result["findings"]
+                    ],
+                    "guarantee": payload["guarantee"],
+                }
+            )
+        )
+    else:
+        for finding in result["findings"]:
+            print(f"  FAIL {finding['check']}: {finding['detail']}")
+        for check in result["checks"]:
+            if check["ok"]:
+                print(f"  ok   {check['check']}")
+        print(result["message"])
+    return EXIT_OK if result["status"] == "ok" else EXIT_VIOLATION
+
+
 def cmd_drift(args) -> int:
     from .drift import check_drift, drift_to_sarif, format_drift
 
@@ -1038,5 +1090,3 @@ def cmd_spec_strength(args) -> int:
     if weak:
         return EXIT_VIOLATION
     return EXIT_OK
-
-

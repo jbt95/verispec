@@ -174,6 +174,17 @@ class Action:
             self.params[pn] = var
         self.requires = list(raw.get("requires") or [])
         self.effects = dict(raw.get("effects") or {})
+        # An action that is meant to change nothing - a read, a periodic
+        # job that finds nothing to do, an access that is allowed - says so.
+        # The linter then does not report it as a forgotten effect.
+        stutter = raw.get("stutter", False)
+        if not isinstance(stutter, bool):
+            raise SpecError(f"action {self.name}: 'stutter' must be true or false")
+        if stutter and self.effects:
+            raise SpecError(
+                f"action {self.name}: 'stutter: true' means the action has no effects"
+            )
+        self.stutter = stutter
 
     def __repr__(self) -> str:  # pragma: no cover - debugging helper
         return f"Action({self.name!r})"
