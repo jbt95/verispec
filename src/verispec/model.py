@@ -275,10 +275,18 @@ class Spec:
 
     def tenv(self, action: Action | None = None) -> dict[str, TypeSpec]:
         """Type environment for expressions (state vars + action params)."""
+        key = None if action is None else id(action)
+        cache = getattr(self, "_tenv_cache", None)
+        if cache is None:
+            cache = {}
+            self._tenv_cache = cache
+        if key in cache:
+            return cache[key]
         env = dict(self.types)
         if action is not None:
             for pn, pv in action.params.items():
                 env[pn] = pv.type
+        cache[key] = env
         return env
 
     def to_dict(self) -> dict[str, Any]:
@@ -581,6 +589,7 @@ def _apply_imports(spec: Spec, path: str) -> None:
     spec.actions = [Action(a) for a in merged_actions] + spec.actions
     spec._types_cache = None
     spec._action_map = None
+    spec._tenv_cache = None
     spec.invariants = merged_invariants + spec.invariants
     from .temporal import FairnessSpec, TemporalProperty, parse_fairness, parse_temporal_list
 
