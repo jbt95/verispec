@@ -1,0 +1,20 @@
+{
+  "cases": [
+    {
+      "label": "deposit-like-transfer",
+      "kind": "correct",
+      "before": {"balance_a": 50, "balance_b": 50},
+      "action": "transfer_a_to_b",
+      "params": {"amount": 15},
+      "after": {"balance_a": 35, "balance_b": 65}
+    },
+    {
+      "label": "negative-balance",
+      "kind": "wrong_output",
+      "before": {"balance_a": 40, "balance_b": 60},
+      "action": "transfer_a_to_b",
+      "params": {"amount": 50},
+      "after": {"balance_a": -10, "balance_b": 110}
+    }
+  ]
+}

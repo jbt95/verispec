@@ -222,15 +222,23 @@ verispec verify-loop examples/bank.yaml --trace examples/traces/bank-valid.json
 verispec verify-loop examples/bank-buggy.yaml --rounds 2 --format json
 ```
 
-**Spec-strength / vacuity** ([StepBench](https://arxiv.org/abs/2610.26679)):
+**Spec-strength / vacuity** ([StepBench](https://arxiv.org/abs/2610.26679) trace
+mutants plus [VerusEval](https://arxiv.org/abs/2610.26464)-style semantics):
 from a known-good trace (or a model-generated walk), build mutants that omit a
 recorded step, swap two steps, or replace an action while keeping the wrong
 state. Mutants the spec still accepts are reported as *survived* (the contract
 may be too weak). Caught mutants get a typed failure label (`missing_step`,
 `misordered_step`, `extraneous_step`, `invariant_contradiction`).
 
+Semantic layers (Z3 vacuity, optional I/O JSON suites, optional reference spec
+comparison) emit a combined `semantic_verdict` (`ok`, `vacuous`,
+`accepted-but-weak`, `rejects-valid-io`). See [RFC-0005](rfcs/0005-spec-strength-semantics.md).
+
 ```bash
 verispec spec-strength examples/bank.yaml --trace examples/traces/bank-valid.json
+verispec spec-strength examples/spec-strength/bank-weak.yaml \
+  --io-examples examples/spec-strength/bank-io.json \
+  --reference-spec examples/bank.yaml --format json
 ```
 
 **Coverage and drift.** `verispec coverage` summarises which parts of the spec

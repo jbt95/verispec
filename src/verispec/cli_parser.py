@@ -393,6 +393,16 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--z3-bound", type=int, default=12, help="Z3 depth for unresolved checks")
     sp.add_argument("--timeout", type=int, default=30000, help="Z3 timeout in ms")
     sp.add_argument("--seed", type=int, default=0, help="RNG seed for fuzz walks")
+    sp.add_argument(
+        "--io-examples",
+        help="JSON I/O suite for semantic strength (correct / wrong-output cases)",
+    )
+    sp.add_argument("--reference-spec", help="reference spec for strength comparison")
+    sp.add_argument(
+        "--semantic-strength",
+        action="store_true",
+        help="run VerusEval-style vacuity and I/O checks before invariant escalation",
+    )
     _add_format(sp)
     sp.set_defaults(func=cmd_verify_loop)
 
@@ -459,6 +469,26 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sp.add_argument("--seed", type=int, default=0)
     sp.add_argument("--max-mutants", type=int, help="limit number of mutants (for large traces)")
+    sp.add_argument(
+        "--io-examples",
+        help="JSON file of concrete I/O cases (correct, wrong_output, invalid_input)",
+    )
+    sp.add_argument(
+        "--reference-spec",
+        help="reference YAML spec for bounded equivalence / strength comparison",
+    )
+    sp.add_argument(
+        "--no-semantic",
+        action="store_true",
+        help="skip Z3 vacuity and reference comparison (trace mutants only)",
+    )
+    sp.add_argument(
+        "--no-auto-io-mutate",
+        action="store_true",
+        help="do not synthesize wrong-output cases from correct I/O examples",
+    )
+    sp.add_argument("--z3-bound", type=int, default=6, help="Z3 depth for reference comparison")
+    sp.add_argument("--timeout", type=int, default=10000, help="Z3 timeout in ms for semantic checks")
     sp.add_argument("-v", "--verbose", action="store_true", help="list caught mutants too")
     _add_format(sp)
     sp.set_defaults(func=cmd_spec_strength)

@@ -420,18 +420,28 @@ verispec verify-loop examples/bank-buggy.yaml --rounds 2 --z3-bound 12 --format 
 | `--z3-bound` | `12` | Z3 depth for unresolved checks |
 | `--timeout` | `30000` | Z3 timeout (ms) |
 | `--seed` | `0` | RNG seed for fuzz walks |
+| `--semantic-strength` | off | Run vacuity / I/O / reference checks before escalation |
+| `--io-examples` | — | JSON I/O suite (same format as `spec-strength`) |
+| `--reference-spec` | — | Reference YAML for strength comparison |
 | `--format` | `text` | `text`, `json`, or `sarif` |
 
 Exit `0` only when verdict is `success`. `failure` or `uncertain` → exit `1`.
 
-### `spec-strength` — spec vacuity via trace perturbations
+### `spec-strength` — trace mutants + VerusEval-style semantics
 
 Mutates a known-good trace (omit step, swap steps, replace action) and reports
-mutants the spec still accepts (**survived** = possibly too weak).
+mutants the spec still accepts (**survived** = possibly too weak). By default
+also runs Z3 **vacuity** checks (tautological invariants, unsatisfiable
+`requires`, postconditions implied by pre alone). Optional I/O JSON suites and
+reference specs add finite-sample behavior checks and bounded strength comparison
+([RFC-0005](../rfcs/0005-spec-strength-semantics.md), ideas from
+[VerusEval](https://arxiv.org/abs/2610.26464)).
 
 ```bash
 verispec spec-strength examples/bank.yaml --trace examples/traces/bank-valid.json
-verispec spec-strength examples/bank.yaml --walk-length 4 --seed 0 -v
+verispec spec-strength examples/spec-strength/bank-weak.yaml \
+  --io-examples examples/spec-strength/bank-io.json \
+  --reference-spec examples/bank.yaml --format json
 ```
 
 | Flag | Default | Role |
@@ -440,10 +450,17 @@ verispec spec-strength examples/bank.yaml --walk-length 4 --seed 0 -v
 | `--walk-length` | `4` | Steps when synthesising a base trace |
 | `--seed` | `0` | RNG seed |
 | `--max-mutants` | — | Cap number of mutants |
+| `--io-examples` | — | JSON I/O cases (`correct`, `wrong_output`, `invalid_input`) |
+| `--reference-spec` | — | Reference YAML for L1–L4-style comparison |
+| `--no-semantic` | off | Skip Z3 vacuity / reference checks |
+| `--no-auto-io-mutate` | off | Do not synthesize wrong outputs from correct cases |
+| `--z3-bound` | `6` | Bound for reference comparison |
+| `--timeout` | `10000` | Z3 timeout (ms) for semantic checks |
 | `-v` / `--verbose` | off | Also list caught mutants |
 | `--format` | `text` | `text`, `json`, or `sarif` |
 
-Exit `1` if any mutant **survived** (spec may be too weak).
+JSON output includes `semantic_verdict`. Exit `1` if mutants **survived** or
+`semantic_verdict` is not `ok`.
 
 ### `refines` — bounded refinement vs. an abstract spec
 

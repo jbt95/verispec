@@ -738,6 +738,8 @@ def cmd_gen_harness(args) -> int:
 
 
 def cmd_verify_loop(args) -> int:
+    from .model import load_spec
+    from .spec_semantic import load_io_suite
     from .trace import load_trace
     from .verify_loop import format_verify_loop, run_verify_loop
 
@@ -745,6 +747,10 @@ def cmd_verify_loop(args) -> int:
     trace = None
     if args.trace:
         trace = load_trace(args.trace)
+    io_cases = load_io_suite(args.io_examples) if getattr(args, "io_examples", None) else None
+    reference = None
+    if getattr(args, "reference_spec", None):
+        reference = load_spec(args.reference_spec)
     report = run_verify_loop(
         spec,
         trace=trace,
@@ -754,6 +760,9 @@ def cmd_verify_loop(args) -> int:
         z3_bound=args.z3_bound,
         timeout_ms=args.timeout,
         seed=args.seed,
+        semantic_strength=getattr(args, "semantic_strength", False),
+        io_cases=io_cases,
+        reference=reference,
     )
     payload = {
         "tool": "verispec",
@@ -969,17 +978,26 @@ def cmd_drift(args) -> int:
 
 
 def cmd_spec_strength(args) -> int:
+    from .spec_semantic import load_io_suite
     from .spec_strength import run_spec_strength
     from .trace import load_trace
 
     spec = _load_spec_or_die(args.spec)
     trace = load_trace(args.trace) if args.trace else None
+    io_cases = load_io_suite(args.io_examples) if args.io_examples else None
+    reference = _load_spec_or_die(args.reference_spec) if args.reference_spec else None
     report = run_spec_strength(
         spec,
         trace=trace,
         walk_length=args.walk_length,
         seed=args.seed,
         max_mutants=args.max_mutants,
+        io_cases=io_cases,
+        reference=reference,
+        semantic=not args.no_semantic,
+        auto_mutate_io=not args.no_auto_io_mutate,
+        z3_bound=args.z3_bound,
+        timeout_ms=args.timeout,
     )
     payload = {
         "tool": "verispec",
@@ -995,6 +1013,12 @@ def cmd_spec_strength(args) -> int:
             f"base trace: {report.base_steps} action step(s); "
             f"{report.caught} mutant(s) caught, {report.survived} survived"
         )
+        if report.semantic_verdict:
+            print(f"semantic verdict: {report.semantic_verdict}")
+        if report.semantic and report.semantic.vacuity.findings:
+            for f in report.semantic.vacuity.findings:
+                if f.status == "proved":
+                    print(f"  vacuity [{f.code}] {f.where}: {f.message}")
         if report.survived:
             print("warning: surviving mutants suggest the spec may be too weak")
         for m in report.mutants:
@@ -1002,7 +1026,10 @@ def cmd_spec_strength(args) -> int:
                 print(f"  SURVIVED  {m.mutant_id}: {m.description}")
             elif args.verbose:
                 print(f"  caught    {m.mutant_id} ({m.failure_kind}): {m.description}")
-    if report.survived > 0:
+    weak = report.survived > 0 or (
+        report.semantic_verdict is not None and report.semantic_verdict != "ok"
+    )
+    if weak:
         return EXIT_VIOLATION
     return EXIT_OK
 
