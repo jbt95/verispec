@@ -101,6 +101,8 @@ ALLOWED_NODES = (
 )
 ALLOWED_FUNCS = {"len", "all", "any", "min", "max", "abs"}
 COLLECTION_FUNCS = {
+    "count_values",
+    "same_keys",
     "map_get",
     "map_set",
     "set_add",
@@ -125,6 +127,8 @@ _FUNCS_WITH_TYPES = {
     "seq_append": 2,
     "keys": 1,
     "values": 1,
+    "count_values": 2,
+    "same_keys": 2,
 }
 
 
@@ -184,8 +188,7 @@ def validate_ast(tree: ast.AST, src: str = "?") -> ast.AST:
             arity = _FUNCS_WITH_TYPES.get(node.func.id)
             if arity is not None and len(node.args) != arity:
                 raise SpecError(
-                    f"{node.func.id}() takes {arity} argument(s) in {src!r}, "
-                    f"got {len(node.args)}"
+                    f"{node.func.id}() takes {arity} argument(s) in {src!r}, got {len(node.args)}"
                 )
         if isinstance(node, ast.Constant) and not isinstance(
             node.value, (int, bool, str, type(None))
@@ -239,9 +242,7 @@ def infer_type(node: ast.AST, tenv: dict[str, TypeSpec]) -> TypeSpec:
         lt = infer_type(node.left, tenv)
         rt = infer_type(node.right, tenv)
         if lt.kind != "int" or rt.kind != "int":
-            raise SpecError(
-                f"arithmetic needs ints, got {type_name(lt)} and {type_name(rt)}"
-            )
+            raise SpecError(f"arithmetic needs ints, got {type_name(lt)} and {type_name(rt)}")
         return IntType()
     if isinstance(node, ast.Compare):
         left = infer_type(node.left, tenv)
@@ -306,7 +307,7 @@ def infer_type(node: ast.AST, tenv: dict[str, TypeSpec]) -> TypeSpec:
             field = _const_str(_slice_of(node))
             if field is None:
                 raise SpecError(
-                    "record fields must be read with a constant name, e.g. customer[\"active\"]"
+                    'record fields must be read with a constant name, e.g. customer["active"]'
                 )
             for name, ft in base.fields:
                 if name == field:
@@ -320,9 +321,7 @@ def infer_type(node: ast.AST, tenv: dict[str, TypeSpec]) -> TypeSpec:
         comp = node.generators[0]
         it = infer_type(comp.iter, tenv)
         if it.kind != "list":
-            raise SpecError(
-                f"comprehension can only iterate over lists, got {type_name(it)}"
-            )
+            raise SpecError(f"comprehension can only iterate over lists, got {type_name(it)}")
         if not isinstance(comp.target, ast.Name):
             raise SpecError("only simple generator targets are supported")
         if comp.is_async:
@@ -386,6 +385,28 @@ def _infer_call(node: ast.Call, tenv: dict[str, TypeSpec]) -> TypeSpec:
         t = infer_type(arg, tenv)
         if t.kind != "list":
             raise SpecError(f"{fname}() needs a generator over a list")
+        return BoolType()
+    if fname == "count_values":
+        mt = infer_type(args[0], tenv)
+        if not isinstance(mt, MapType):
+            raise SpecError(f"count_values() needs a map, got {type_name(mt)}")
+        vt = infer_type(args[1], tenv)
+        if vt.kind != mt.value.kind:
+            raise SpecError(
+                f"count_values() compares against {type_name(vt)}, but the map "
+                f"holds {type_name(mt.value)}"
+            )
+        return IntType()
+    if fname == "same_keys":
+        a = infer_type(args[0], tenv)
+        b = infer_type(args[1], tenv)
+        if not isinstance(a, MapType) or not isinstance(b, MapType):
+            raise SpecError("same_keys() needs two maps")
+        if a.key.kind != b.key.kind or a.domain != b.domain:
+            raise SpecError(
+                "same_keys() needs two maps over the same key domain: "
+                f"{type_name(a)} and {type_name(b)}"
+            )
         return BoolType()
     if fname == "map_get":
         mt = infer_type(args[0], tenv)
@@ -635,7 +656,28 @@ def _eval_call(node: ast.Call, env: dict[str, Any], types: dict[str, TypeSpec]) 
         else:
             vals = _eval(arg, env, types)
         return all(vals) if fname == "all" else any(vals)
-    if fname in ("map_get", "map_set", "set_add", "set_has", "seq_get", "seq_append", "keys", "values"):
+    if fname in ("count_values", "same_keys"):
+        if fname == "count_values":
+            m = _eval(node.args[0], env, types)
+            v = _eval(node.args[1], env, types)
+            if not isinstance(m, dict):
+                raise SpecError("count_values() needs a map")
+            return sum(1 for value in m.values() if value == v)
+        a = _eval(node.args[0], env, types)
+        b = _eval(node.args[1], env, types)
+        if not isinstance(a, dict) or not isinstance(b, dict):
+            raise SpecError("same_keys() needs two maps")
+        return set(a.keys()) == set(b.keys())
+    if fname in (
+        "map_get",
+        "map_set",
+        "set_add",
+        "set_has",
+        "seq_get",
+        "seq_append",
+        "keys",
+        "values",
+    ):
         from . import values as V
 
         if fname in ("map_get", "map_set"):
@@ -673,8 +715,21 @@ def _eval_call(node: ast.Call, env: dict[str, Any], types: dict[str, TypeSpec]) 
             if not isinstance(mt, MapType):
                 raise SpecError(f"{fname}() needs a map")
             if fname == "keys":
-                return sorted(m.keys(), key=lambda x: (0, x) if isinstance(x, int) and not isinstance(x, bool) else (1, str(x)))
-            return [m[k] for k in sorted(m.keys(), key=lambda x: (0, x) if isinstance(x, int) and not isinstance(x, bool) else (1, str(x)))]
+                return sorted(
+                    m.keys(),
+                    key=lambda x: (
+                        (0, x) if isinstance(x, int) and not isinstance(x, bool) else (1, str(x))
+                    ),
+                )
+            return [
+                m[k]
+                for k in sorted(
+                    m.keys(),
+                    key=lambda x: (
+                        (0, x) if isinstance(x, int) and not isinstance(x, bool) else (1, str(x))
+                    ),
+                )
+            ]
     raise SpecError(f"unknown function {fname!r}")
 
 
@@ -830,7 +885,12 @@ def _z3_scalar(v: Any, what: str = "value"):
     return v
 
 
-def _z3(node: ast.AST, zenv: dict[str, Z3Binding], tenv: dict[str, TypeSpec], expected: TypeSpec | None = None):
+def _z3(
+    node: ast.AST,
+    zenv: dict[str, Z3Binding],
+    tenv: dict[str, TypeSpec],
+    expected: TypeSpec | None = None,
+):
     import z3
 
     if isinstance(node, ast.Constant):
@@ -979,7 +1039,7 @@ def _z3_subscript(node: ast.Subscript, zenv, tenv):
         field = _const_str(idx_node)
         if field is None:
             raise SpecError(
-                "record fields must be read with a constant name, e.g. customer[\"active\"]"
+                'record fields must be read with a constant name, e.g. customer["active"]'
             )
         for name, ft in base_type.fields:
             if name == field:
@@ -1021,6 +1081,43 @@ def _z3_call(node: ast.Call, zenv, tenv):
             )
         vals = [_z3(e, zenv, tenv) for e in arg.generators[0].iter.elts]
         return z3.And(*vals) if fname == "all" else z3.Or(*vals)
+    if fname == "count_values":
+        mt = infer_type(node.args[0], tenv)
+        assert isinstance(mt, MapType)
+        coll = _z3(node.args[0], zenv, tenv)
+        assert isinstance(coll, Z3Map)
+        value = _z3_scalar(_z3(node.args[1], zenv, tenv), "map value")
+        # The count of the entries whose value is `value`: a slot counts
+        # only when it is present *and* holds the value.
+        terms = []
+        for i in range(len(mt.domain)):
+            idx = z3.IntVal(i)
+            terms.append(
+                z3.If(
+                    z3.And(
+                        z3.Select(coll.present, idx),
+                        z3.Select(coll.values, idx) == value,
+                    ),
+                    1,
+                    0,
+                )
+            )
+        return z3.Sum(terms)
+    if fname == "same_keys":
+        at = infer_type(node.args[0], tenv)
+        bt = infer_type(node.args[1], tenv)
+        assert isinstance(at, MapType) and isinstance(bt, MapType)
+        acoll = _z3(node.args[0], zenv, tenv)
+        bcoll = _z3(node.args[1], zenv, tenv)
+        assert isinstance(acoll, Z3Map) and isinstance(bcoll, Z3Map)
+        # Two maps describe the same things when they agree, slot by slot,
+        # on which slots are present.
+        return z3.And(
+            *[
+                z3.Select(acoll.present, z3.IntVal(i)) == z3.Select(bcoll.present, z3.IntVal(i))
+                for i in range(len(at.domain))
+            ]
+        )
     if fname == "map_get":
         mt = infer_type(node.args[0], tenv)
         assert isinstance(mt, MapType)
@@ -1085,9 +1182,7 @@ def _z3_call(node: ast.Call, zenv, tenv):
         coll = _z3(node.args[0], zenv, tenv)
         assert isinstance(coll, Z3Seq)
         i = _z3_scalar(_z3(node.args[1], zenv, tenv), "sequence index")
-        return z3.If(
-            z3.And(i >= 0, i < coll.size), z3.Select(coll.items, i), z3_default(qt.elem)
-        )
+        return z3.If(z3.And(i >= 0, i < coll.size), z3.Select(coll.items, i), z3_default(qt.elem))
     if fname == "seq_append":
         qt = infer_type(node.args[0], tenv)
         assert isinstance(qt, SeqType)

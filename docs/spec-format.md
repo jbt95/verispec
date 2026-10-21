@@ -593,6 +593,31 @@ forbidden everywhere.
 
 `in` on the right of a map tests for the *key*, not the value.
 
+### `count_values()` and `same_keys()`
+
+Two maps that describe the same things must agree about *which* things they
+describe, and a count must be the number of entries that hold a value.  Both
+rules are common enough in a contract that the language has words for them:
+
+```yaml
+vars:
+  todo_tag:  {type: map, key: int, key_min: 0, key_max: 2, value: "enum[none,t1,t2]"}
+  tag_count: {type: map, key: str, key_domain: [t1, t2], value: int}
+invariants:
+  # the count of a tag is exactly the number of todos that carry it
+  - {name: the_count_matches, expr: "map_get(tag_count, \"t1\") == count_values(todo_tag, \"t1\")"}
+  # the two maps describe the same todos
+  - {name: the_maps_agree, expr: "same_keys(todo_tag, todo_status)"}
+```
+
+`count_values(m, v)` counts the entries of the map whose value is `v`; a
+slot that is not present does not count, whatever value it happens to hold.
+`same_keys(m1, m2)` is true when both maps have exactly the same keys
+present or absent.  Both are defined for maps over the same key domain.
+
+Without them, the same rules have to be written out slot by slot, and every
+one of those slots is a place to be wrong.
+
 ### `keys()` and `values()` are not checkable
 
 `keys(m)` and `values(m)` have no finite symbolic domain: a Z3 model does not

@@ -136,9 +136,7 @@ def _substitute(node: ast.AST, name: str, replacement: ast.AST) -> ast.AST:
     return _Substituter(name, replacement).visit(copy.deepcopy(node))
 
 
-def _quantifier_parts(
-    node: ast.Call, tenv: dict[str, TypeSpec]
-) -> tuple[str, list[list[ast.AST]]]:
+def _quantifier_parts(node: ast.Call, tenv: dict[str, TypeSpec]) -> tuple[str, list[list[ast.AST]]]:
     """Split `all(f(x) for x in items)` into the per-element bodies.
 
     Returns the function name and, for every element of the list literal, the
@@ -194,8 +192,7 @@ def _rust_value_literal(value: Any) -> str:
         return "Value::from(vec![" + ", ".join(_rust_value_literal(v) for v in value) + "])"
     if isinstance(value, dict):
         items = ", ".join(
-            f"({_rust_str(k)}.to_string(), {_rust_value_literal(v)})"
-            for k, v in value.items()
+            f"({_rust_str(k)}.to_string(), {_rust_value_literal(v)})" for k, v in value.items()
         )
         return "Value::Object(Map::from_iter([" + items + "]))"
     raise SpecError(f"cannot express {value!r} as a JSON value in Rust")
@@ -299,9 +296,7 @@ def _rust(node: ast.AST, tenv: dict[str, TypeSpec], var_names: set[str]) -> str:
             elif isinstance(op, ast.In):
                 parts.append(_rust_membership(left_node, comparator, tenv, var_names))
             elif isinstance(op, ast.NotIn):
-                parts.append(
-                    f"(!{_rust_membership(left_node, comparator, tenv, var_names)})"
-                )
+                parts.append(f"(!{_rust_membership(left_node, comparator, tenv, var_names)})")
             else:
                 sym = {
                     ast.Lt: "<",
@@ -362,9 +357,7 @@ def _rust_membership(
     raise SpecError(f"'in' is not supported on {type_name(right_type)} in Rust")
 
 
-def _rust_subscript(
-    node: ast.Subscript, tenv: dict[str, TypeSpec], var_names: set[str]
-) -> str:
+def _rust_subscript(node: ast.Subscript, tenv: dict[str, TypeSpec], var_names: set[str]) -> str:
     base_type = infer_type(node.value, tenv)
     base = _rust(node.value, tenv, var_names)
     index_node = _slice_of(node)
@@ -389,9 +382,7 @@ def _rust_subscript(
     raise SpecError(f"type {type_name(base_type)} cannot be subscripted")
 
 
-def _rust_call(
-    node: ast.Call, tenv: dict[str, TypeSpec], var_names: set[str]
-) -> str:
+def _rust_call(node: ast.Call, tenv: dict[str, TypeSpec], var_names: set[str]) -> str:
     fname = node.func.id  # type: ignore[union-attr]
     args = [_rust(a, tenv, var_names) for a in node.args]
     if fname == "len":
@@ -412,6 +403,10 @@ def _rust_call(
         return folded
     if fname in ("all", "any"):
         return _rust_quantifier(node, tenv, var_names)
+    if fname == "count_values":
+        return f"veri_count_values(&({args[0]}), &({args[1]}))"
+    if fname == "same_keys":
+        return f"veri_same_keys(&({args[0]}), &({args[1]}))"
     if fname == "map_get":
         map_type = infer_type(node.args[0], tenv)
         assert isinstance(map_type, MapType)
@@ -464,9 +459,7 @@ def _rust_call(
     raise SpecError(f"unknown function {fname!r}")
 
 
-def _rust_quantifier(
-    node: ast.Call, tenv: dict[str, TypeSpec], var_names: set[str]
-) -> str:
+def _rust_quantifier(node: ast.Call, tenv: dict[str, TypeSpec], var_names: set[str]) -> str:
     """Expand `all(...)` / `any(...)` over a list literal."""
     fname, per_element = _quantifier_parts(node, tenv)
     if not per_element:
@@ -607,9 +600,7 @@ def _c_membership(
     )
 
 
-def _c_call(
-    node: ast.Call, tenv: dict[str, TypeSpec], var_names: set[str]
-) -> str:
+def _c_call(node: ast.Call, tenv: dict[str, TypeSpec], var_names: set[str]) -> str:
     fname = node.func.id  # type: ignore[union-attr]
     args = [_c(a, tenv, var_names) for a in node.args]
     if fname == "len":
@@ -632,15 +623,10 @@ def _c_call(
         return folded
     if fname in ("all", "any"):
         return _c_quantifier(node, tenv, var_names)
-    raise SpecError(
-        f"the C adapter supports scalar specs only: {fname}() needs a "
-        "collection"
-    )
+    raise SpecError(f"the C adapter supports scalar specs only: {fname}() needs a collection")
 
 
-def _c_quantifier(
-    node: ast.Call, tenv: dict[str, TypeSpec], var_names: set[str]
-) -> str:
+def _c_quantifier(node: ast.Call, tenv: dict[str, TypeSpec], var_names: set[str]) -> str:
     fname, per_element = _quantifier_parts(node, tenv)
     if not per_element:
         return "1" if fname == "all" else "0"

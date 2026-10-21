@@ -200,6 +200,28 @@ pub fn veri_map_get(map: &Value, key: &str, default: &Value) -> Value {
     }
 }
 
+/// How many entries of the map hold this value.
+///
+/// A slot counts only when it is present *and* holds the value, exactly
+/// like the Z3 encoding does.
+pub fn veri_count_values(map: &Value, value: &Value) -> i64 {
+    match map {
+        Value::Object(m) => m.values().filter(|v| *v == value).count() as i64,
+        _ => 0,
+    }
+}
+
+/// Whether two maps describe the same things: the same keys, present or
+/// not, slot by slot.
+pub fn veri_same_keys(a: &Value, b: &Value) -> bool {
+    match (a, b) {
+        (Value::Object(x), Value::Object(y)) => {
+            x.len() == y.len() && x.keys().all(|k| y.contains_key(k))
+        }
+        _ => false,
+    }
+}
+
 /// A copy of the map with the key set.
 ///
 /// A key outside the declared domain is ignored, exactly like the Z3
@@ -595,6 +617,24 @@ mod tests {
     }
 
     #[test]
+    fn count_values_counts_the_entries_that_hold_the_value() {
+        let map = json!({"0": "x", "1": "y", "2": "z"});
+        assert_eq!(veri_count_values(&map, &json!("z")), 1);
+        assert_eq!(veri_count_values(&map, &json!("x")), 1);
+        assert_eq!(veri_count_values(&map, &json!("nope")), 0);
+        assert_eq!(veri_count_values(&json!({}), &json!("z")), 0);
+    }
+
+    fn same_keys_compares_the_key_sets() {
+        assert!(veri_same_keys(&json!({"0": "a"}), &json!({"0": "b"})));
+        assert!(!veri_same_keys(&json!({"0": "a"}), &json!({})));
+        assert!(!veri_same_keys(&json!({"0": "a"}), &json!({"1": "b"})));
+        assert!(veri_same_keys(
+            &json!({"0": "a", "1": "b"}),
+            &json!({"0": "x", "1": "y"})
+        ));
+    }
+
     fn a_set_holds_every_element_once() {
         let set = json!(["a"]);
         let domain = vec![json!("a"), json!("b")];

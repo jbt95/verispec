@@ -174,7 +174,14 @@ def _ts(node: ast.AST, tenv: dict[str, TypeSpec], var_names: set[str]) -> str:
     if isinstance(node, ast.Compare):
         out = []
         left = _ts(node.left, tenv, var_names)
-        mp = {ast.Eq: "===", ast.NotEq: "!==", ast.Lt: "<", ast.LtE: "<=", ast.Gt: ">", ast.GtE: ">="}
+        mp = {
+            ast.Eq: "===",
+            ast.NotEq: "!==",
+            ast.Lt: "<",
+            ast.LtE: "<=",
+            ast.Gt: ">",
+            ast.GtE: ">=",
+        }
         for op, comp in zip(node.ops, node.comparators):
             right = _ts(comp, tenv, var_names)
             if isinstance(op, (ast.In, ast.NotIn)):
@@ -247,6 +254,10 @@ def _ts_call(node: ast.Call, tenv, var_names) -> str:
         return f"Math.{fname}({', '.join(args)})"
     if fname in ("all", "any"):
         return _ts_quantifier(node, tenv, var_names)
+    if fname == "count_values":
+        return f"veriCountValues({args[0]}, {args[1]})"
+    if fname == "same_keys":
+        return f"veriSameKeys({args[0]}, {args[1]})"
     if fname == "map_get":
         mt = infer_type(node.args[0], tenv)
         assert isinstance(mt, MapType)
@@ -334,7 +345,7 @@ def _go(node: ast.AST, tenv: dict[str, TypeSpec], var_names: set[str]) -> str:
         return str(v)
     if isinstance(node, ast.Name):
         base = "state" if node.id in var_names else "params"
-        return _go_coerce(f'{base}[{_go_literal(node.id)}]', tenv[node.id])
+        return _go_coerce(f"{base}[{_go_literal(node.id)}]", tenv[node.id])
     if isinstance(node, ast.BoolOp):
         op = " && " if isinstance(node.op, ast.And) else " || "
         return "(" + op.join(_go(v, tenv, var_names) for v in node.values) + ")"
@@ -425,6 +436,10 @@ def _go_call(node: ast.Call, tenv, var_names) -> str:
         raise SpecError(f"len() needs a collection, got {type_name(t)}")
     if fname == "abs":
         return f"veriAbs({args[0]})"
+    if fname == "count_values":
+        return f"veriCountValues({args[0]}, {args[1]})"
+    if fname == "same_keys":
+        return f"veriSameKeys({args[0]}, {args[1]})"
     if fname in ("min", "max"):
         return f"veri{fname.capitalize()}({', '.join(args)})"
     if fname in ("all", "any"):
@@ -600,6 +615,10 @@ def _tla_call(node: ast.Call, tenv) -> str:
         raise SpecError(f"len() needs a collection, got {type_name(t)}")
     if fname == "abs":
         return f"Abs({args[0]})"
+    if fname == "count_values":
+        return f"Cardinality({{k \\in DOMAIN {args[0]} : {args[0]}[k] = {args[1]}}})"
+    if fname == "same_keys":
+        return f"(DOMAIN {args[0]} = DOMAIN {args[1]})"
     if fname in ("min", "max"):
         return f"{fname.capitalize()}({{{', '.join(args)}}})"
     if fname in ("all", "any"):
@@ -617,13 +636,15 @@ def _tla_call(node: ast.Call, tenv) -> str:
         items = "{" + ", ".join(_tla(e, tenv) for e in comp.iter.elts) + "}"
         op = "\\A" if fname == "all" else "\\E"
         return f"({op} {target} \\in {items} : {body})"
+    if fname == "count_values":
+        return f"Cardinality({{k \\in DOMAIN {args[0]} : {args[0]}[k] = {args[1]}}})"
+    if fname == "same_keys":
+        return f"(DOMAIN {args[0]} = DOMAIN {args[1]})"
     if fname == "map_get":
         mt = infer_type(node.args[0], tenv)
         assert isinstance(mt, MapType)
         default = _tla_default(mt.value)
-        return (
-            f"(IF {args[1]} \\in DOMAIN {args[0]} THEN {args[0]}[{args[1]}] ELSE {default})"
-        )
+        return f"(IF {args[1]} \\in DOMAIN {args[0]} THEN {args[0]}[{args[1]}] ELSE {default})"
     if fname == "map_set":
         mt = infer_type(node.args[0], tenv)
         assert isinstance(mt, MapType)
@@ -636,9 +657,7 @@ def _tla_call(node: ast.Call, tenv) -> str:
         st = infer_type(node.args[0], tenv)
         assert isinstance(st, SetType)
         dom = _tla_domain(st)
-        return (
-            f"(IF {args[1]} \\in {dom} THEN {args[0]} \\cup {{{args[1]}}} ELSE {args[0]})"
-        )
+        return f"(IF {args[1]} \\in {dom} THEN {args[0]} \\cup {{{args[1]}}} ELSE {args[0]})"
     if fname == "set_has":
         return f"({args[1]} \\in {args[0]})"
     if fname == "seq_get":
