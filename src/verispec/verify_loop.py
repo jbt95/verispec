@@ -165,7 +165,7 @@ def _fuzz_invariant(
     for _ in range(trials):
         state = initial_state(spec)
         for step in range(max_steps):
-            bad = [b for b in check_invariants(spec, state) if b["name"] == inv_name]
+            bad = check_invariants(spec, state, inv_name)
             if bad:
                 return {
                     "step": step,
@@ -178,7 +178,7 @@ def _fuzz_invariant(
                 state = apply_action(spec, state, action.name, params)
             except Exception:
                 continue
-        bad = [b for b in check_invariants(spec, state) if b["name"] == inv_name]
+        bad = check_invariants(spec, state, inv_name)
         if bad:
             return {
                 "step": max_steps,
@@ -233,7 +233,7 @@ def _apply_trace_round(
                 state = state_from_json(spec.types, step.get("state"), f"step {i}")
             except Exception:
                 continue
-            bad = [b for b in check_invariants(spec, state) if b["name"] == inv_name]
+            bad = check_invariants(spec, state, inv_name)
             if bad:
                 inv_check.status = "violated"
                 inv_check.backend = _BACKEND_TRACE

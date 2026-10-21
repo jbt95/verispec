@@ -312,7 +312,7 @@ def _mutate_state_value(key: str, value: Any, rng: random.Random) -> Any:
         if not value:
             return {0: 1}
         k = rng.choice(list(value.keys()))
-        child = copy.deepcopy(value)
+        child = dict(value)
         child[k] = _mutate_state_value(k, child[k], rng)
         return child
     if isinstance(value, list):

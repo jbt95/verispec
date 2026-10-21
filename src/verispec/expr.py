@@ -133,7 +133,7 @@ _FUNCS_WITH_TYPES = {
 # --------------------------------------------------------------------------
 
 
-@functools.cache
+@functools.lru_cache(maxsize=8192)
 def _parse_expr_cached(s: str) -> ast.Expression:
     try:
         tree = ast.parse(s, mode="eval")

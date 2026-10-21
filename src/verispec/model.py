@@ -690,12 +690,17 @@ def apply_action(
     return nxt
 
 
-def check_invariants(spec: Spec, state: dict[str, Any]) -> list[dict[str, str]]:
-    """Return the invariants violated by a state."""
+def check_invariants(spec: Spec, state: dict[str, Any], name: str | None = None) -> list[dict[str, str]]:
+    """Return the invariants violated by a state.
+
+    When ``name`` is given, only that invariant is evaluated.
+    """
     from .expr import eval_python
 
     bad = []
     for inv in spec.invariants:
+        if name is not None and inv.get("name") != name:
+            continue
         if not eval_python(inv["expr"], dict(state), spec.types):
             bad.append(inv)
     return bad

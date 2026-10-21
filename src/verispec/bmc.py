@@ -12,6 +12,7 @@ never a proof for all depths, and the result says so explicitly.
 from __future__ import annotations
 
 import ast
+import functools
 from typing import Any
 
 import z3
@@ -121,12 +122,20 @@ def _unchanged(var, cur: dict[str, Any], nxt: dict[str, Any]) -> list:
     raise SpecError(f"var {var.name}: unsupported type {t.kind}")
 
 
+@functools.lru_cache(maxsize=256)
+def _domain_index_map(domain: tuple) -> dict:
+    out: dict = {}
+    for i, item in enumerate(domain):
+        k = (item, isinstance(item, bool))
+        if k not in out:
+            out[k] = i
+    return out
+
+
 def _domain_index_concrete(t, domain: tuple, key: Any) -> int | None:
     """Position of a concrete key/element inside a finite domain."""
-    for i, item in enumerate(domain):
-        if item == key and isinstance(item, bool) == isinstance(key, bool):
-            return i
-    return None
+    idx = _domain_index_map(domain).get((key, isinstance(key, bool)))
+    return idx
 
 
 def _encode_init(solver, spec: Spec, states: list[dict[str, Any]]) -> None:

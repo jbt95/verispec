@@ -230,24 +230,31 @@ def _independent(m1: _Move, m2: _Move) -> bool:
     return _moves_independent(m1.reads, m1.writes, m2.reads, m2.writes)
 
 
+def _move_key(m: _Move):
+    return (m.actor_index, m.actor_id, m.step_index, m.action,
+            tuple(sorted(m.params.items())), m.reads, m.writes)
+
+
 def _ample_set(moves: list[_Move]) -> list[_Move]:
     if len(moves) <= 1:
         return moves
     ordered = sorted(moves, key=lambda m: (m.actor_index, m.step_index, m.action))
     ample: list[_Move] = [ordered[0]]
+    ample_keys: set = {_move_key(ordered[0])}
     for m in ordered[1:]:
         if any(not _independent(m, a) for a in ample):
             ample.append(m)
+            ample_keys.add(_move_key(m))
     for m in ordered:
-        if m in ample:
+        if _move_key(m) in ample_keys:
             continue
         if all(_independent(m, a) for a in ample):
             continue
-        if m not in ample:
-            ample.append(m)
+        ample.append(m)
+        ample_keys.add(_move_key(m))
     if len(ample) < len(ordered):
         for m in ordered:
-            if m not in ample and not all(_independent(m, a) for a in ample):
+            if _move_key(m) not in ample_keys and not all(_independent(m, a) for a in ample):
                 return ordered
     return ample
 
