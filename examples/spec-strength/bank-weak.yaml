@@ -1,4 +1,4 @@
-spec_version: "1.0"
+spec_version: "1.1"
 name: BankWeak
 description: >
   Weak bank spec: tautological invariant and transfer guards omit balance checks.

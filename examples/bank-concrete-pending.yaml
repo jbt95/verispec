@@ -1,4 +1,4 @@
-spec_version: "1.0"
+spec_version: "1.1"
 name: BankConcretePending
 description: >
   Two accounts with settled balances and pending outbound transfers.

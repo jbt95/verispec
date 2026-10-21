@@ -1,4 +1,4 @@
-spec_version: "1.0"
+spec_version: "1.1"
 name: Ledger
 description: >
   A ledger with two accounts.  Postings move value between accounts, the

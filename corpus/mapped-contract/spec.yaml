@@ -1,0 +1,39 @@
+spec_version: "1.1"
+name: MappedContract
+description: >
+  A contract that names the code it is a claim about.
+
+  The `implements` mapping is metadata: the checkers ignore it, so the
+  contract means exactly the same with a mapping and without one.  What it
+  buys is the drift checker, which can then say that the implementation of
+  *this* action changed and the contract of *this* action did not.
+vars:
+  balance: {type: int, min: 0, max: 1000}
+init:
+  balance: "100"
+actions:
+  - name: withdraw
+    implements:
+      - path: src/accounts/withdraw.ts
+      - glob: src/accounts/*.test.ts
+    params:
+      amount: {type: int, min: 1, max: 50}
+    requires: ["amount <= balance"]
+    effects:
+      balance: "balance - amount"
+  - name: deposit
+    implements:
+      - path: src/accounts/deposit.ts
+    params:
+      amount: {type: int, min: 1, max: 50}
+    effects:
+      balance: "balance + amount"
+invariants:
+  - name: the_balance_is_never_negative
+    expr: "balance >= 0"
+    implements:
+      - path: src/accounts/ledger.ts
+  - name: the_balance_is_bounded
+    expr: "balance <= 1000"
+    implements:
+      - glob: src/accounts/*.ts

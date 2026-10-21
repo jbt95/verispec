@@ -132,6 +132,8 @@ Open questions for the maintainers and the community. Be specific.
 | [RFC-0002](0002-temporal-liveness.md) | Temporal properties and fairness | OPEN | `eventually` and `leads_to` properties, weak/strong fairness on actions, bounded lasso liveness checking, TLA+ export, and pending obligations on finite traces. |
 | [RFC-0003](0003-concurrency-actors.md) | Concurrent actors and interleaving exploration | ACCEPTED | Optional `concurrency.actors` programs, `check-concurrent`, trace `actor` field, partial-order reduction. |
 | [RFC-0004](0004-refinement-mapping.md) | Refinement mapping between specs | ACCEPTED | Concrete specs may declare `refines:` with state abstraction and action simulation; `verispec refines` checks bounded refinement. |
+| [RFC-0005](0005-spec-strength-semantics.md) | The semantics of `verispec spec-strength` | ACCEPTED | What "the spec is weak" means, so the check cannot cry wolf. |
+| [RFC-0006](0006-fine-grained-drift.md) | Fine-grained drift mapping | IMPLEMENTED | Invariants may name their implementation, and the drift checker compares each action and each invariant with its own contract instead of one digest per file. |
 
 ## Relationship with ADRs
 

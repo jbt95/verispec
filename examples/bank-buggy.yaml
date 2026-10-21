@@ -1,4 +1,4 @@
-spec_version: "1.0"
+spec_version: "1.1"
 name: Bank
 description: >
   BUGGY variant of the bank spec: transfer_a_to_b has no balance check, so an

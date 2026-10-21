@@ -5,7 +5,7 @@ agent-read-only artifact: everything else in VeriSpec (the Z3 checker, the TLA+
 and Lean exports, the generated property tests, the trace checker, the agent
 brief) is derived from it.
 
-This document is the reference for **format version 1.0**. If your spec still
+This document is the reference for **format version 1.1**. If your spec still
 has no `spec_version` field, it is a v0.1 spec: see
 [`docs/spec-format-v0.1.md`](spec-format-v0.1.md).
 
@@ -18,6 +18,7 @@ has no `spec_version` field, it is a v0.1 spec: see
 - [`init`](#init)
 - [`actions`](#actions)
 - [`invariants`](#invariants)
+- [`implements`: naming the code a contract is about](#implements-naming-the-code-a-contract-is-about)
 - [The expression language](#the-expression-language)
 - [Semantics and edge cases](#semantics-and-edge-cases)
 - [How collections are encoded in Z3](#how-collections-are-encoded-in-z3)
@@ -55,7 +56,7 @@ action whose `requires` are false in the current state simply cannot be taken.
 ## A complete example
 
 ```yaml
-spec_version: "1.0"
+spec_version: "1.1"
 name: Bank
 description: >
   Two accounts A and B.  Transfers conserve the total and no account may go
@@ -115,7 +116,7 @@ without breaking the loader.
 ## `spec_version`
 
 ```yaml
-spec_version: "1.0"
+spec_version: "1.1"
 ```
 
 `spec_version` is the semantic version of the *format* the file is written in,
@@ -134,7 +135,7 @@ Upgrade a v0.1 spec with:
 
 ```console
 $ verispec migrate spec.yaml --in-place
-migrated spec.yaml from spec_version 0.1 to 1.0
+migrated spec.yaml from spec_version 0.1 to 1.1
 ```
 
 `migrate` without `--in-place` prints the upgraded YAML to stdout.
@@ -441,6 +442,51 @@ bounded liveness (see [Temporal properties and fairness](#temporal-properties-an
 
 `verispec lint` reports specs whose invariants can never fail, because a
 tautology is worse than no invariant: it looks like evidence and is not.
+
+## `implements`: naming the code a contract is about
+
+An action and an invariant are both claims about code.  The `implements`
+mapping says *which* code, so that `verispec drift` can tell the difference
+between "the implementation of this action changed and the contract did not"
+and "the contract of this action changed and the implementation did not".
+
+```yaml
+actions:
+  - name: refund
+    implements:
+      - path: src/orders/refund.ts
+      - glob: src/orders/*.test.ts
+    effects:
+      ...
+
+invariants:
+  - name: the_balance_is_never_negative
+    expr: "balance >= 0"
+    implements:
+      - path: src/accounts/ledger.ts
+```
+
+A mapping entry is either `path: <repo-relative path>` or
+`glob: <pattern>` (`fnmatch` syntax, `*` and `?`).  A plain string is
+accepted as a shorthand for `path`.
+
+The mapping is **metadata**.  It is not read by the type checker, the
+interpreter, the Z3 encoding, the TLA+ export, the generated property tests
+or the trace checker: the contract's meaning, and every result derived from
+it, are the same with a mapping and without one.  The mapping only tells
+the drift checker which files to compare.
+
+A malformed mapping is an error, not a guess:
+
+```console
+$ verispec validate spec.yaml
+error: action 'refund': an 'implements' entry needs a 'path' or a 'glob'
+```
+
+A `glob` that matches nothing is not an error: a test file that is deleted
+later must not make the spec invalid.
+
+See [RFC-0006](../rfcs/0006-fine-grained-drift.md) for the reasoning.
 
 ## Temporal properties and fairness
 

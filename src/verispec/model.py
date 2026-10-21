@@ -2,7 +2,7 @@
 
 One YAML file is one state machine:
 
-    spec_version: "1.0"
+    spec_version: "1.1"
     name: Bank
     description: ...
     imports: [...]              # optional modules
@@ -61,7 +61,7 @@ __all__ = [
 #: Major versions of the spec format this CLI understands.
 SUPPORTED_SPEC_MAJORS = (0, 1)
 #: The format version new specs are written with.
-CURRENT_SPEC_VERSION = "1.0"
+CURRENT_SPEC_VERSION = "1.1"
 
 
 # --------------------------------------------------------------------------
@@ -181,9 +181,7 @@ class Action:
         if not isinstance(stutter, bool):
             raise SpecError(f"action {self.name}: 'stutter' must be true or false")
         if stutter and self.effects:
-            raise SpecError(
-                f"action {self.name}: 'stutter: true' means the action has no effects"
-            )
+            raise SpecError(f"action {self.name}: 'stutter: true' means the action has no effects")
         self.stutter = stutter
 
     def __repr__(self) -> str:  # pragma: no cover - debugging helper
@@ -209,14 +207,21 @@ class Spec:
             self.vars[n] = Var(n, r)
         self.init: dict[str, Any] = dict(data.get("init") or {})
         self.actions = [Action(a) for a in (data.get("actions") or [])]
-        self.invariants: list[dict[str, str]] = []
+        self.invariants: list[dict[str, Any]] = []
         for inv in data.get("invariants") or []:
             if isinstance(inv, str):
                 self.invariants.append({"name": inv, "expr": inv})
             elif isinstance(inv, dict):
-                self.invariants.append(
-                    {"name": inv.get("name", "invariant"), "expr": inv.get("expr", "")}
-                )
+                entry: dict[str, Any] = {
+                    "name": inv.get("name", "invariant"),
+                    "expr": inv.get("expr", ""),
+                }
+                # The mapping is metadata: it names the implementation an
+                # invariant is a claim about.  It is not part of the
+                # contract's meaning, and the checkers ignore it.
+                if "implements" in inv:
+                    entry["implements"] = inv["implements"]
+                self.invariants.append(entry)
             else:
                 raise SpecError("invariants must be strings or {name, expr} mappings")
         from .temporal import parse_fairness, parse_temporal_list
@@ -380,12 +385,17 @@ class Spec:
                 else:
                     _type_check(e, tenv, f"action {a.name} effect {k}")
                     _check_assignable(var.type, e, tenv, f"action {a.name} effect {k}")
+        # the `implements` mappings: they name implementation files, and a
+        # malformed one is a mistake in the spec, not something to guess at
+        for a in self.actions:
+            _validate_implements(a.raw.get("implements"), f"action {a.name}")
         # invariants
         inv_names: set[str] = set()
         for inv in self.invariants:
             if inv["name"] in inv_names:
                 raise SpecError(f"duplicate invariant {inv['name']!r}")
             inv_names.add(inv["name"])
+            _validate_implements(inv.get("implements"), f"invariant {inv['name']}")
             t = _type_check(inv["expr"], self.types, f"invariant {inv['name']}")
             if t.kind != "bool":
                 raise SpecError(
@@ -483,6 +493,31 @@ def _value_to_expr(
             return repr(stripped)
         return raw
     raise SpecError(f"{where}: unsupported value {raw!r}")
+
+
+def _validate_implements(raw: Any, where: str) -> None:
+    """Check an `implements` mapping.
+
+    The mapping names the implementation a piece of contract is a claim
+    about.  A malformed mapping is a mistake in the spec: it is better to
+    say so than to guess which files were meant.
+    """
+    if raw is None:
+        return
+    entries: list[Any]
+    if isinstance(raw, dict):
+        entries = [raw]
+    elif isinstance(raw, list):
+        entries = list(raw)
+    else:
+        raise SpecError(f"{where}: 'implements' must be a list or a mapping")
+    for entry in entries:
+        if isinstance(entry, str):
+            continue
+        if not isinstance(entry, dict):
+            raise SpecError(f"{where}: an 'implements' entry must be a string or a mapping")
+        if not entry.get("path") and not entry.get("file") and not entry.get("glob"):
+            raise SpecError(f"{where}: an 'implements' entry needs a 'path' or a 'glob'")
 
 
 def _type_check(expr: Any, tenv: dict[str, TypeSpec], where: str) -> TypeSpec:

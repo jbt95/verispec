@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import fnmatch
+import hashlib
 import json
 import subprocess
 from dataclasses import dataclass, field
@@ -14,12 +15,16 @@ import yaml
 from .errors import SpecError
 from .model import Spec, load_spec_data
 from .sign import default_signature_path, spec_digest
+from .types import type_name
 
 __all__ = [
     "DriftFinding",
     "DriftReport",
+    "action_contract_digest",
     "action_impl_paths",
+    "all_invariant_mappings",
     "check_drift",
+    "invariant_contract_digest",
     "format_drift",
     "git_changed_files",
     "load_spec_at_ref",
@@ -29,6 +34,8 @@ DriftKind = Literal[
     "implementation_changed_without_spec",
     "spec_changed_without_implementation",
     "signature_changed_without_implementation",
+    "invariant_changed_without_implementation",
+    "implementation_changed_without_invariant",
 ]
 
 
@@ -39,11 +46,14 @@ class DriftFinding:
     message: str
     implementation_paths: list[str] = field(default_factory=list)
     spec_paths: list[str] = field(default_factory=list)
+    #: The invariant the finding is about, when it is about one.
+    invariant: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "kind": self.kind,
             "action": self.action,
+            "invariant": self.invariant,
             "message": self.message,
             "implementation_paths": self.implementation_paths,
             "spec_paths": self.spec_paths,
@@ -129,6 +139,64 @@ def all_action_mappings(spec: Spec, repo_root: Path | None = None) -> dict[str, 
         paths = action_impl_paths(action.raw, root)
         if paths:
             out[action.name] = paths
+    return out
+
+
+def action_contract_digest(spec: Spec, name: str) -> str:
+    """The digest of one action's *own* contract.
+
+    The whole spec has one digest, but the question drift asks is about one
+    action: did the behaviour this action describes change without the
+    contract of this action changing?  A digest of the whole spec cannot
+    answer it - a change to another action would silence the finding, and a
+    change anywhere would raise it.
+    """
+    action = next((a for a in spec.actions if a.name == name), None)
+    if action is None:
+        return ""
+    payload = {
+        "name": action.name,
+        "requires": list(action.requires),
+        "effects": {k: str(v) for k, v in action.effects.items()},
+        "params": {
+            pn: {
+                "type": type_name(pv.type),
+                "min": getattr(pv.type, "min", None),
+                "max": getattr(pv.type, "max", None),
+                "values": list(getattr(pv.type, "values", []) or []),
+            }
+            for pn, pv in action.params.items()
+        },
+    }
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()
+
+
+def invariant_contract_digest(spec: Spec, name: str) -> str:
+    """The digest of one invariant's own contract: its expression."""
+    for inv in spec.invariants:
+        if inv.get("name") == name:
+            return hashlib.sha256(
+                f"{inv.get('name', '')}\n{inv.get('expr', '')}".encode()
+            ).hexdigest()
+    return ""
+
+
+def invariant_impl_paths(inv_raw: dict[str, Any], repo_root: Path) -> set[str]:
+    """Resolve implementation path globs for one invariant."""
+    return action_impl_paths(inv_raw, repo_root)
+
+
+def all_invariant_mappings(spec: Spec, repo_root: Path | None = None) -> dict[str, set[str]]:
+    """The implementation paths of every invariant that declares a mapping."""
+    spec_path = Path(spec.path).resolve()
+    root = repo_root or _repo_root_for(spec_path)
+    out: dict[str, set[str]] = {}
+    for inv in spec.invariants:
+        paths = invariant_impl_paths(inv, root)
+        if paths:
+            out[str(inv.get("name", ""))] = paths
     return out
 
 
@@ -257,29 +325,7 @@ def check_drift(
     spec_paths = _collect_spec_dependency_paths(spec_head, root)
 
     mappings = all_action_mappings(spec_head, root)
-    if not mappings:
-        report = DriftReport(
-            base=base,
-            head=head,
-            spec_path=rel_spec,
-            digest_base=digest_base,
-            digest_head=digest_head,
-            spec_changed=spec_changed,
-            signature_changed=signature_changed,
-        )
-        if spec_changed or signature_changed:
-            report.findings.append(
-                DriftFinding(
-                    kind="spec_changed_without_implementation",
-                    action=None,
-                    message=(
-                        "the spec or signed digest changed but no action defines "
-                        "`implements` mappings to compare implementation files"
-                    ),
-                    spec_paths=sorted(changed.intersection(spec_paths)) or [rel_spec],
-                )
-            )
-        return report
+    invariant_mappings = all_invariant_mappings(spec_head, root)
 
     report = DriftReport(
         base=base,
@@ -291,31 +337,87 @@ def check_drift(
         signature_changed=signature_changed,
     )
 
-    contract_changed = spec_changed or signature_changed
+    if not mappings and not invariant_mappings:
+        if spec_changed or signature_changed:
+            report.findings.append(
+                DriftFinding(
+                    kind="spec_changed_without_implementation",
+                    action=None,
+                    message=(
+                        "the spec or signed digest changed but no action or invariant "
+                        "defines `implements` mappings to compare implementation files"
+                    ),
+                    spec_paths=sorted(changed.intersection(spec_paths)) or [rel_spec],
+                )
+            )
+        return report
 
+    # The contract of *this* element: its own requires, effects and
+    # parameters, not the digest of the whole file.  A change to another
+    # action must not raise a finding here, and a change here must not be
+    # silenced by a change elsewhere.
     for action_name, impl_paths in mappings.items():
-        impl_changed = bool(changed.intersection(impl_paths))
-        if impl_changed and not contract_changed:
+        impl_changed = sorted(changed.intersection(impl_paths))
+        action_changed = action_contract_digest(spec_base, action_name) != (
+            action_contract_digest(spec_head, action_name)
+        )
+        if impl_changed and not action_changed:
             report.findings.append(
                 DriftFinding(
                     kind="implementation_changed_without_spec",
                     action=action_name,
                     message=(
-                        f"implementation mapped to action {action_name!r} changed "
-                        f"but the spec digest and signature did not"
+                        f"the implementation mapped to action {action_name!r} changed, "
+                        f"but the contract of {action_name!r} did not"
                     ),
-                    implementation_paths=sorted(changed.intersection(impl_paths)),
+                    implementation_paths=impl_changed,
                     spec_paths=[rel_spec],
                 )
             )
-        if contract_changed and not impl_changed:
+        if action_changed and not impl_changed:
             report.findings.append(
                 DriftFinding(
                     kind="spec_changed_without_implementation",
                     action=action_name,
                     message=(
-                        f"spec or signature changed but mapped implementation for "
-                        f"action {action_name!r} did not"
+                        f"the contract of action {action_name!r} changed, but the "
+                        f"implementation mapped to it did not"
+                    ),
+                    implementation_paths=sorted(impl_paths),
+                    spec_paths=sorted(changed.intersection(spec_paths)) or [rel_spec],
+                )
+            )
+
+    # The same, for the invariants: an invariant is a claim about the
+    # implementation, and the mapping says which implementation.
+    for invariant_name, impl_paths in invariant_mappings.items():
+        impl_changed = sorted(changed.intersection(impl_paths))
+        invariant_changed = invariant_contract_digest(
+            spec_base, invariant_name
+        ) != invariant_contract_digest(spec_head, invariant_name)
+        if impl_changed and not invariant_changed:
+            report.findings.append(
+                DriftFinding(
+                    kind="implementation_changed_without_invariant",
+                    action=None,
+                    invariant=invariant_name,
+                    message=(
+                        f"the implementation mapped to invariant {invariant_name!r} "
+                        f"changed, but the invariant did not"
+                    ),
+                    implementation_paths=impl_changed,
+                    spec_paths=[rel_spec],
+                )
+            )
+        if invariant_changed and not impl_changed:
+            report.findings.append(
+                DriftFinding(
+                    kind="invariant_changed_without_implementation",
+                    action=None,
+                    invariant=invariant_name,
+                    message=(
+                        f"the expression of invariant {invariant_name!r} changed, but "
+                        f"the implementation mapped to it did not"
                     ),
                     implementation_paths=sorted(impl_paths),
                     spec_paths=sorted(changed.intersection(spec_paths)) or [rel_spec],
@@ -327,10 +429,7 @@ def check_drift(
 
 def format_drift(report: DriftReport) -> str:
     if report.ok:
-        return (
-            f"no drift between {report.base} and {report.head} "
-            f"(digest {report.digest_head})"
-        )
+        return f"no drift between {report.base} and {report.head} (digest {report.digest_head})"
     lines = [
         f"drift detected between {report.base} and {report.head}",
         f"  spec digest: {report.digest_base} -> {report.digest_head}",

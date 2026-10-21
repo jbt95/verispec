@@ -13,7 +13,7 @@ __all__ = ["template_names", "build_template"]
 
 
 _LEDGER = """\
-spec_version: "1.0"
+spec_version: "1.1"
 name: Ledger
 description: >
   A double entry ledger with two accounts.  Every posting moves value between
@@ -59,7 +59,7 @@ _LEDGER_INV = """\
 
 
 _IDEMPOTENCY = """\
-spec_version: "1.0"
+spec_version: "1.1"
 name: Idempotency
 description: >
   A request may only be applied once.  The seen set records the request ids
@@ -88,7 +88,7 @@ invariants:
 """
 
 _ORDER = """\
-spec_version: "1.0"
+spec_version: "1.1"
 name: OrderStateMachine
 description: >
   An order moves through pending -> paid -> shipped -> delivered.  It can be
@@ -125,7 +125,7 @@ invariants:
 """
 
 _RATE_LIMITER = """\
-spec_version: "1.0"
+spec_version: "1.1"
 name: RateLimiter
 description: >
   A token bucket with a fixed capacity.  Refills are bounded by the capacity
@@ -155,7 +155,7 @@ invariants:
 """
 
 _QUEUE = """\
-spec_version: "1.0"
+spec_version: "1.1"
 name: Queue
 description: >
   A bounded queue.  Enqueuing past the capacity is a bug, dequeuing an empty

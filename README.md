@@ -243,8 +243,12 @@ verispec spec-strength examples/spec-strength/bank-weak.yaml \
 
 **Coverage and drift.** `verispec coverage` summarises which parts of the spec
 were exercised by traces (and optional test-event recordings), with
-`--fail-under` for CI. `verispec drift` compares a git range to per-action
-`implements` mappings and warns when code and contract move independently. The
+`--fail-under` for CI. `verispec drift` compares a git range to the
+`implements` mappings of the actions and the invariants, and warns when code
+and contract move independently
+([RFC-0006](rfcs/0006-fine-grained-drift.md)). The comparison is per element:
+the contract of *this* action changed, not "the spec file changed", so a
+change to one action does not raise a finding about the others. The
 GitHub Action accepts `drift-check: true` for PR annotations.
 
 **Refinement checking** ([RFC-0004](rfcs/0004-refinement-mapping.md)): a concrete spec
