@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import copy
 import os
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
@@ -65,7 +64,7 @@ def merge_invariant_results(
     unknowns = [(n, r) for n, r in ordered if r.get("status") == "unknown"]
     if unknowns:
         name, result = unknowns[0]
-        out = copy.deepcopy(result)
+        out = dict(result)
         out["max_bound"] = max_bound
         out["message"] = (
             f"invariant {name}: {result.get('message', 'unknown')} "
