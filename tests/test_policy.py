@@ -119,3 +119,68 @@ def test_sigstore_verify_path(monkeypatch, tmp_path):
     result2 = verify_signature(spec, sig, require_cryptographic=True)
     assert result2["ok"] is False
     assert result2["reason"] == "sigstore-invalid"
+
+
+def test_policy_can_require_the_unbounded_proof(tmp_path):
+    """The policy must be able to demand the strongest guarantee there is.
+
+    `check` proves by default now, so "proved" is a guarantee the tool
+    produces.  A policy that cannot demand it is a policy that cannot hold
+    the project to it.
+    """
+    spec = tmp_path / "bank.yaml"
+    spec.write_text((ROOT / "examples" / "bank.yaml").read_text(encoding="utf-8"))
+    policy = tmp_path / "policy.yaml"
+    policy.write_text(
+        f"""
+policy_version: "1.0"
+entries:
+  - name: bank
+    spec: {spec.name}
+    owners:
+      - verispec-maintainers
+    min_guarantee: proved
+    bound: 4
+"""
+    )
+    report = run_policy_check(policy, repo_root=tmp_path)
+    codes = {f["code"] for f in report["findings"]}
+    assert "guarantee-proved" not in codes, report["findings"]
+
+
+def test_policy_reports_a_proof_that_does_not_close(tmp_path):
+    # The invariant holds within the bound, and the induction still does not
+    # close: the hypothesis may hold x = 4, and the successor is 5.
+    spec = tmp_path / "weak.yaml"
+    spec.write_text(
+        """
+spec_version: "1.0"
+name: Weak
+vars:
+  x: {type: int, min: 0, max: 100}
+init:
+  x: "0"
+actions:
+  - name: bump
+    effects:
+      x: "x + 1"
+invariants:
+  - {name: below_five, expr: "x < 5"}
+"""
+    )
+    policy = tmp_path / "policy.yaml"
+    policy.write_text(
+        """
+policy_version: "1.0"
+entries:
+  - name: weak
+    spec: weak.yaml
+    owners:
+      - verispec-maintainers
+    min_guarantee: proved
+    bound: 4
+"""
+    )
+    report = run_policy_check(policy, repo_root=tmp_path)
+    codes = {f["code"] for f in report["findings"]}
+    assert "guarantee-proved" in codes, report["findings"]

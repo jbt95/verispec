@@ -32,6 +32,7 @@ GuaranteeLevel = Literal[
     "signed-digest",
     "cryptographic",
     "bounded-proved",
+    "proved",
     "bounded-liveness-proved",
     "conformance-tested",
 ]
@@ -82,8 +83,9 @@ _GUARANTEE_ORDER: dict[GuaranteeLevel, int] = {
     "signed-digest": 1,
     "cryptographic": 2,
     "bounded-proved": 3,
-    "bounded-liveness-proved": 4,
-    "conformance-tested": 5,
+    "proved": 4,
+    "bounded-liveness-proved": 5,
+    "conformance-tested": 6,
 }
 
 
@@ -323,6 +325,25 @@ def _check_entry(repo_root: Path, entry: PolicyEntry) -> list[PolicyFinding]:
                     (
                         f"bounded model check did not reach ok at bound {entry.bound}: "
                         f"{result.get('message', result.get('status'))}"
+                    ),
+                    str(spec_path),
+                )
+            )
+
+    if _GUARANTEE_ORDER[entry.min_guarantee] >= _GUARANTEE_ORDER["proved"]:
+        # The unbounded proof: the strongest guarantee the checker can make.
+        from .prove import prove
+
+        proof = prove(spec, k=1, timeout_ms=30_000, precheck_bound=entry.bound)
+        if proof.get("status") != "ok":
+            findings.append(
+                PolicyFinding(
+                    entry.name,
+                    "guarantee-proved",
+                    "error",
+                    (
+                        f"the proof did not close: "
+                        f"{proof.get('message', proof.get('status'))}"
                     ),
                     str(spec_path),
                 )

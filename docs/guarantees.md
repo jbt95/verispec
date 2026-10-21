@@ -186,6 +186,29 @@ An `unknown` result exits with code `1`, the same code a violation uses. A
 pipeline therefore treats "no information" as a failure, which is the safe
 default: an inconclusive check must not be green.
 
+## What a policy can demand
+
+`verispec policy check` is the gate: it reads `.verispec/policy.yaml` and
+fails when an entry does not hold.  The level an entry names with
+`min_guarantee` is the *evidence* the repository promises, and the policy
+runs the same checks the CLI runs — a policy must not be looking at
+different evidence than the pipeline.
+
+| `min_guarantee` | What the policy then requires |
+| --- | --- |
+| `present` | A spec exists and is well formed. |
+| `signed-digest` | The spec matches the digest a human approved. |
+| `cryptographic` | The digest is signed with a cryptographic key. |
+| `bounded-proved` | The safety invariants hold in every execution up to the bound. |
+| `proved` | The safety invariants hold in every execution, at every depth. |
+| `bounded-liveness-proved` | No liveness counterexample (lasso) up to the bound. |
+| `conformance-tested` | A recorded trace of the real implementation conformed. |
+
+The levels are ordered, and a level demands everything below it.  `proved`
+demands the unbounded proof: the k-induction has to close, not just the
+bounded search.  A contract that cannot be proved can still be required to
+be `bounded-proved`, but then the policy says exactly that.
+
 ## The bounded claim
 
 The bound is the depth of the search, not a property of the spec.

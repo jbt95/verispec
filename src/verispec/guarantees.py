@@ -124,6 +124,7 @@ EVIDENCE_LEVELS: dict[str, str] = {
     "signed-digest": "The spec matches the digest that a human approved.",
     "cryptographic": "The digest is signed with a cryptographic key.",
     "bounded-proved": "The safety invariants hold in every execution up to the bound.",
+    "proved": "The safety invariants hold in every execution, at every depth.",
     "bounded-liveness-proved": (
         "No liveness counterexample (lasso) up to the bound: the temporal "
         "obligations of the contract hold up to that depth."
