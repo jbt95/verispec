@@ -603,7 +603,9 @@ def _rename_expr(expr: str, mapping: dict[str, str]) -> str:
     """Rename the state variables referenced by an expression."""
     from .expr import parse_expr
 
-    tree = parse_expr(expr)
+    import copy
+
+    tree = copy.deepcopy(parse_expr(expr))
     for node in ast.walk(tree):
         if isinstance(node, ast.Name) and node.id in mapping:
             node.id = mapping[node.id]
