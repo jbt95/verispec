@@ -68,6 +68,7 @@ def check_trace_data(spec: Spec, trace: list[dict[str, Any]]) -> dict[str, Any]:
     init, error = _evaluate_initial_state(spec)
     if error:
         return _fail(None, "evaluation-error", f"cannot evaluate initial state: {error}")
+    prev_state: dict[str, Any] | None = None
     for i, step in enumerate(trace):
         raw_state = step.get("state")
         try:
@@ -106,12 +107,9 @@ def check_trace_data(spec: Spec, trace: list[dict[str, Any]]) -> dict[str, Any]:
                     expected=value_to_json(types, init),
                     got=value_to_json(types, state),
                 )
+            prev_state = state
             continue
-        prev = trace[i - 1].get("state")
-        try:
-            prev_state = state_from_json(types, prev, f"step {i - 1}: state")
-        except SpecError as e:
-            return _fail(i - 1, "invalid-state", str(e))
+        assert prev_state is not None
         action = step.get("action")
         params = step.get("params", {})
         actor = step.get("actor")
@@ -168,6 +166,7 @@ def check_trace_data(spec: Spec, trace: list[dict[str, Any]]) -> dict[str, Any]:
                 expected=value_to_json(types, expected),
                 got=value_to_json(types, state),
             )
+        prev_state = state
     from .temporal import check_temporal_on_trace
 
     temporal = check_temporal_on_trace(spec, trace)

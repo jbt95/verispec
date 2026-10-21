@@ -8,6 +8,7 @@ an ``actor`` label on each transition.
 from __future__ import annotations
 
 import ast
+import functools
 import itertools
 import json
 from dataclasses import dataclass
@@ -214,14 +215,19 @@ def _vars_in_expr(expr: str, state_names: set[str]) -> set[str]:
     return found
 
 
-def _independent(m1: _Move, m2: _Move) -> bool:
-    r1, w1 = m1.reads, m1.writes
-    r2, w2 = m2.reads, m2.writes
+@functools.cache
+def _moves_independent(
+    r1: frozenset[str], w1: frozenset[str], r2: frozenset[str], w2: frozenset[str]
+) -> bool:
     if w1 & (r2 | w2):
         return False
     if w2 & (r1 | w1):
         return False
     return True
+
+
+def _independent(m1: _Move, m2: _Move) -> bool:
+    return _moves_independent(m1.reads, m1.writes, m2.reads, m2.writes)
 
 
 def _ample_set(moves: list[_Move]) -> list[_Move]:

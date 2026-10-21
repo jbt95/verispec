@@ -7,8 +7,9 @@ write specs in practice.
 
 from __future__ import annotations
 
+import functools
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -34,15 +35,23 @@ class Symbol:
 class SpecSourceIndex:
     path: str
     symbols: list[Symbol]
+    by_line: dict[int, list[Symbol]] = field(default_factory=dict, init=False, repr=False)
+    by_name: dict[str, list[Symbol]] = field(default_factory=dict, init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        for sym in self.symbols:
+            self.by_line.setdefault(sym.line, []).append(sym)
+            self.by_name.setdefault(sym.name, []).append(sym)
 
     def at(self, line: int, character: int) -> Symbol | None:
-        for sym in self.symbols:
-            if sym.line == line and sym.column <= character:
+        for sym in self.by_line.get(line, []):
+            if sym.column <= character:
                 end = sym.column + len(sym.name)
                 if character <= end + 2:
                     return sym
-        for sym in self.symbols:
-            if sym.line == line and sym.name in _line_slice(self.path, line):
+        line_text = _line_slice(self.path, line)
+        for sym in self.by_line.get(line, []):
+            if sym.name in line_text:
                 if sym.name in _word_at(self.path, line, character):
                     return sym
         return _symbol_by_word(self, line, character)
@@ -57,8 +66,8 @@ class SpecSourceIndex:
         return None
 
     def lookup(self, name: str, kinds: tuple[str, ...] = ()) -> Symbol | None:
-        for sym in self.symbols:
-            if sym.name == name and (not kinds or sym.kind in kinds):
+        for sym in self.by_name.get(name, []):
+            if not kinds or sym.kind in kinds:
                 return sym
         return None
 
@@ -191,11 +200,23 @@ def _resolve_import_path(lines: list[str], line_no: int, base: Path) -> str | No
     return None
 
 
+@functools.lru_cache(maxsize=128)
+def _file_lines_cached(path: str, mtime_ns: int) -> tuple[str, ...]:
+    try:
+        return tuple(Path(path).read_text(encoding="utf-8").splitlines())
+    except OSError:
+        return ()
+
+
 def _line_slice(path: str, line: int) -> str:
     try:
-        return Path(path).read_text(encoding="utf-8").splitlines()[line]
-    except (OSError, IndexError):
-        return ""
+        mtime_ns = Path(path).stat().st_mtime_ns
+    except OSError:
+        mtime_ns = 0
+    lines = _file_lines_cached(path, mtime_ns)
+    if 0 <= line < len(lines):
+        return lines[line]
+    return ""
 
 
 def _word_at(path: str, line: int, character: int) -> str:

@@ -100,14 +100,16 @@ def action_impl_paths(action_raw: dict[str, Any], repo_root: Path) -> set[str]:
     mappings = _normalize_mapping(action_raw.get("implements"))
     paths: set[str] = set()
     root = repo_root.resolve()
+    files = None
     for m in mappings:
         if "glob" in m:
             pattern = m["glob"]
-            for p in root.rglob("*"):
-                if p.is_file():
-                    rel = p.relative_to(root).as_posix()
-                    if fnmatch.fnmatch(rel, pattern):
-                        paths.add(rel)
+            if files is None:
+                files = [p for p in root.rglob("*") if p.is_file()]
+            for p in files:
+                rel = p.relative_to(root).as_posix()
+                if fnmatch.fnmatch(rel, pattern):
+                    paths.add(rel)
         path_key = m.get("path") or m.get("file")
         if path_key:
             candidate = (root / path_key).resolve()

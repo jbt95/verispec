@@ -59,7 +59,7 @@ def merge_invariant_results(
     ordered = sorted(results, key=lambda item: item[0])
     for name, result in ordered:
         if result.get("status") == "violation":
-            out = copy.deepcopy(result)
+            out = dict(result)
             out["max_bound"] = max_bound
             return out
     unknowns = [(n, r) for n, r in ordered if r.get("status") == "unknown"]
@@ -117,7 +117,7 @@ def run_bounded_check(
     if use_cache and cache_dir is not None:
         cached = read_cached_result(cache_dir, key)
         if cached is not None:
-            out = copy.deepcopy(cached)
+            out = dict(cached)
             out["from_cache"] = True
             return out
 

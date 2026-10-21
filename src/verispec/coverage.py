@@ -111,9 +111,10 @@ def merge_coverage(base: CoverageReport, other: CoverageReport) -> CoverageRepor
     for src in other.sources:
         if src not in base.sources:
             base.sources.append(src)
+    action_index = _action_index(base)
     for a in other.actions:
         if a.get("covered"):
-            row = _action_index(base)[a["name"]]
+            row = action_index[a["name"]]
             row["covered"] = True
             row["hits"] = row.get("hits", 0) + a.get("hits", 1)
     gi = _guard_index(base)
@@ -123,9 +124,10 @@ def merge_coverage(base: CoverageReport, other: CoverageReport) -> CoverageRepor
             row["covered_true"] = True
         if g.get("covered_false"):
             row["covered_false"] = True
+    inv_index = _invariant_index(base)
     for inv in other.invariants:
         if inv.get("covered"):
-            _invariant_index(base)[inv["name"]]["covered"] = True
+            inv_index[inv["name"]]["covered"] = True
     pi = _param_index(base)
     for p in other.parameters:
         row = pi[(p["action"], p["param"])]

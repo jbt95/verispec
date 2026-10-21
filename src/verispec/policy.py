@@ -191,20 +191,24 @@ def _match_paths(repo_root: Path, patterns: list[str]) -> list[Path]:
     if not patterns:
         return []
     matched: list[Path] = []
+    all_files: list[Path] | None = None
     for pattern in patterns:
         if "**" in pattern:
             for path in repo_root.glob(pattern):
                 if path.is_file():
                     matched.append(path)
                 elif path.is_dir():
-                    matched.extend(f for f in path.rglob("*") if f.is_file())
+                    if all_files is None:
+                        all_files = [f for f in repo_root.rglob("*") if f.is_file()]
+                    matched.extend(f for f in all_files if f.is_relative_to(path))
             continue
         if any(ch in pattern for ch in "*?[]"):
-            for candidate in repo_root.rglob("*"):
-                if candidate.is_file():
-                    rel = candidate.relative_to(repo_root).as_posix()
-                    if fnmatch.fnmatch(rel, pattern) or fnmatch.fnmatch(str(candidate), pattern):
-                        matched.append(candidate)
+            if all_files is None:
+                all_files = [f for f in repo_root.rglob("*") if f.is_file()]
+            for candidate in all_files:
+                rel = candidate.relative_to(repo_root).as_posix()
+                if fnmatch.fnmatch(rel, pattern) or fnmatch.fnmatch(str(candidate), pattern):
+                    matched.append(candidate)
         else:
             target = _resolve(repo_root, pattern)
             if target.is_file():

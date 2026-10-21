@@ -29,6 +29,7 @@ access stays forbidden.
 from __future__ import annotations
 
 import ast
+import functools
 from typing import Any
 
 from . import types as T
@@ -132,16 +133,21 @@ _FUNCS_WITH_TYPES = {
 # --------------------------------------------------------------------------
 
 
-def parse_expr(s: Any) -> ast.Expression:
-    """Parse an expression string into a validated AST."""
-    if not isinstance(s, str):
-        raise SpecError(f"expression must be string, got {type(s).__name__}: {s!r}")
+@functools.cache
+def _parse_expr_cached(s: str) -> ast.Expression:
     try:
         tree = ast.parse(s, mode="eval")
     except SyntaxError as e:
         raise SpecError(f"invalid expression {s!r}: {e}") from e
     validate_ast(tree, s)
     return _normalize(tree)
+
+
+def parse_expr(s: Any) -> ast.Expression:
+    """Parse an expression string into a validated AST."""
+    if not isinstance(s, str):
+        raise SpecError(f"expression must be string, got {type(s).__name__}: {s!r}")
+    return _parse_expr_cached(s)
 
 
 class _BoolNormalizer(ast.NodeTransformer):
