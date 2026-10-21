@@ -257,10 +257,14 @@ class Spec:
         return {n: v.type for n, v in self.vars.items()}
 
     def action(self, name: str) -> Action:
-        for a in self.actions:
-            if a.name == name:
-                return a
-        raise SpecError(f"unknown action {name!r}")
+        cache = getattr(self, "_action_map", None)
+        if cache is None:
+            cache = {a.name: a for a in self.actions}
+            self._action_map = cache
+        try:
+            return cache[name]
+        except KeyError:
+            raise SpecError(f"unknown action {name!r}")
 
     def has_action(self, name: str) -> bool:
         return any(a.name == name for a in self.actions)
