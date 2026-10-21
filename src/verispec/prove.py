@@ -58,7 +58,11 @@ def prove(
     """Try to prove invariants for all depths using k-induction (default) or Spacer."""
     if isinstance(k, bool) or not isinstance(k, int) or k < 1:
         raise SpecError("k must be a positive integer")
-    if isinstance(precheck_bound, bool) or not isinstance(precheck_bound, int) or precheck_bound < 0:
+    if (
+        isinstance(precheck_bound, bool)
+        or not isinstance(precheck_bound, int)
+        or precheck_bound < 0
+    ):
         raise SpecError("precheck_bound must be a non-negative integer")
     preflight = _preflight(spec, max(k, precheck_bound), timeout_ms)
     if preflight:
@@ -68,7 +72,9 @@ def prove(
         raise SpecError("method must be 'induction' or 'spacer'")
 
     if method == "spacer":
-        spacer_result = _prove_spacer(spec, invariant_filter=invariant_filter, timeout_ms=timeout_ms)
+        spacer_result = _prove_spacer(
+            spec, invariant_filter=invariant_filter, timeout_ms=timeout_ms
+        )
         if spacer_result is not None:
             return spacer_result
 
@@ -125,15 +131,25 @@ def prove(
             },
         )
     if step["status"] == "violation":
+        artifact = step.get("artifact")
         return {
             "status": "unknown",
             "guarantee": "unknown",
             "induction_k": k,
             "proof_method": "induction",
-            "reason": "counterexample-to-induction",
+            "reason": step.get("reason", "counterexample-to-induction"),
             "message": (
-                "k-induction could not close: found a counterexample to the inductive step. "
-                "Strengthen invariants or use a larger k."
+                (
+                    "the hypothesis states do not satisfy the invariants: the "
+                    "counterexample is an artifact of the encoding, not an "
+                    "inductive gap.  This is a defect in the checker, not in "
+                    "the contract."
+                )
+                if artifact
+                else (
+                    "k-induction could not close: found a counterexample to the "
+                    "inductive step. Strengthen invariants or use a larger k."
+                )
             ),
             "induction_cex": step.get("trace"),
             "violations": step.get("violations"),
@@ -147,6 +163,35 @@ def prove(
         "reason": step.get("reason", "solver"),
         "message": step.get("message", "k-induction step was inconclusive"),
     }
+
+
+def _wellformed(var, slot: dict[str, Any]):
+    """The constraint that ties a collection's size to the slots that are present.
+
+    A map or a set is encoded as a values array, a present-flags array and a
+    size counter, and ``len()`` reads the counter.  The transition relation
+    keeps the counter in step with the flags - but only if it was in step to
+    begin with.
+
+    The hypothesis states of the inductive step are not produced by the
+    transition relation, so without this constraint the solver may pick a
+    size that no implementation could ever produce.  Such a state satisfies
+    (or violates) an invariant for a reason that has nothing to do with the
+    contract, and the inductive step can never close.  The counterexample the
+    tool prints is then self-contradictory: its header says the hypothesis
+    satisfies the invariants, and the state it prints does not.
+
+    Sequences need no such constraint: their size counter *is* the
+    definition of the sequence, and there is no second array to disagree
+    with it.
+    """
+    t = var.type
+    if isinstance(t, (MapType, SetType)):
+        present, size, domain = slot["present"], slot["size"], t.domain
+    else:
+        return None
+    terms = [z3.If(z3.Select(present, z3.IntVal(i)), 1, 0) for i in range(len(domain))]
+    return size == z3.Sum(terms)
 
 
 def _inductive_step(
@@ -171,9 +216,7 @@ def _inductive_step(
     for st in states:
         for _n, v in spec.vars.items():
             if isinstance(v.type, EnumType):
-                solver.add(
-                    z3.Or(*[st[_n]["const"] == z3.StringVal(val) for val in v.type.values])
-                )
+                solver.add(z3.Or(*[st[_n]["const"] == z3.StringVal(val) for val in v.type.values]))
 
     for t in range(depth):
         bindings = {n: _binding(v, states[t][n]) for n, v in spec.vars.items()}
@@ -183,6 +226,12 @@ def _inductive_step(
             for n, v in spec.vars.items():
                 if isinstance(v.type, (MapType, SetType, SeqType)):
                     solver.add(states[t][n]["size"] <= v.type.max_size)
+        # The hypothesis states must be states the implementation could
+        # actually be in.  See `_wellformed`.
+        for n, v in spec.vars.items():
+            constraint = _wellformed(v, states[t][n])
+            if constraint is not None:
+                solver.add(constraint)
 
     nact = len(spec.actions)
     choices: list[Any] = []
@@ -281,6 +330,26 @@ def _inductive_step(
     model = solver.model()
     trace = _decode_trace(spec, model, states, depth, choices, params_by_step)
     violations = _find_violations(spec, trace, invariant_filter=invariant_filter)
+
+    # The counterexample to induction is only meaningful when the hypothesis
+    # states really do satisfy the invariants.  If they do not, the solver
+    # found a state the encoding cannot represent - a collection whose size
+    # counter disagrees with its slots, say - and the trace says so.  Saying
+    # "strengthen your invariants" about such a state is bad advice: no
+    # invariant can exclude it, because the contract language cannot express
+    # what is wrong with it.
+    hypothesis_violations = [v for v in violations if v["step"] < depth]
+    if hypothesis_violations:
+        return {
+            "status": "violation",
+            "depth": depth,
+            "trace": trace,
+            "violations": violations,
+            "violated": [v["name"] for v in violations],
+            "reason": "hypothesis-violates-invariants",
+            "artifact": True,
+        }
+
     return {
         "status": "violation",
         "depth": depth,
@@ -296,9 +365,7 @@ def _prove_spacer(
     timeout_ms: int,
 ) -> dict[str, Any] | None:
     """Attempt a CHC/Spacer proof for scalar-only specs; None to fall back."""
-    unsupported = any(
-        v.type.kind not in ("int", "bool", "str", "enum") for v in spec.vars.values()
-    )
+    unsupported = any(v.type.kind not in ("int", "bool", "str", "enum") for v in spec.vars.values())
     if unsupported or spec.actions and any(a.params for a in spec.actions):
         return {
             "status": "unknown",
@@ -338,12 +405,8 @@ def format_result(spec: Spec, result: dict[str, Any]) -> str:
         for entry in trace:
             lines.append(f"    step {entry['step']}: state={entry['state']}")
             if "action" in entry:
-                lines.append(
-                    f"      -> action {entry['action']} params={entry.get('params', {})}"
-                )
+                lines.append(f"      -> action {entry['action']} params={entry.get('params', {})}")
         for v in result.get("violations") or []:
-            lines.append(
-                f"    violated at step {v['step']}: {v['name']} ({v['kind']}) {v['expr']}"
-            )
+            lines.append(f"    violated at step {v['step']}: {v['name']} ({v['kind']}) {v['expr']}")
     lines.append(f"  (guarantee: {result.get('guarantee', 'unknown')})")
     return "\n".join(lines)

@@ -17,6 +17,7 @@ from verispec.prove import GUARANTEE_PROVED, prove  # noqa: E402
 BANK = ROOT / "examples" / "bank.yaml"
 BANK_BUGGY = ROOT / "examples" / "bank-buggy.yaml"
 NON_INDUCTIVE = ROOT / "tests" / "fixtures" / "non_inductive.yaml"
+COLLECTION = ROOT / "tests" / "fixtures" / "inductive_collection.yaml"
 TEMPORAL = ROOT / "tests" / "fixtures" / "temporal-fair.yaml"
 
 
@@ -28,6 +29,34 @@ def test_prove_bank():
     r = prove(spec(BANK), k=1, timeout_ms=60000)
     assert r["status"] == "ok", r
     assert r["guarantee"] == GUARANTEE_PROVED
+
+
+def test_prove_collection_spec():
+    """A collection's size counter must not be free in the hypothesis states.
+
+    The hypothesis of the induction is "any state satisfying the invariants".
+    For a map or a set that is only true if the size counter and the slots
+    that are present agree: otherwise the hypothesis contains states no
+    implementation could ever produce, the inductive step can never close,
+    and the counterexample the tool prints has a hypothesis state that
+    violates the very invariant it is claimed to satisfy.
+    """
+    r = prove(spec(COLLECTION), k=1, timeout_ms=60000)
+    assert r["status"] == "ok", r
+    assert r["guarantee"] == GUARANTEE_PROVED
+
+
+def test_prove_cti_is_not_mistaken_for_an_encoding_artifact():
+    """A genuine inductive gap must still be reported as a genuine gap.
+
+    The base case is skipped here (`precheck_bound=0`), so what is left is
+    the inductive step: the hypothesis satisfies the invariants, and the
+    successor does not.  That is a real gap, and it must not be reported as
+    an artifact of the encoding.
+    """
+    r = prove(spec(NON_INDUCTIVE), k=1, precheck_bound=0, timeout_ms=60000)
+    assert r["status"] == "unknown"
+    assert r.get("reason") == "counterexample-to-induction"
 
 
 def test_prove_safety_only_when_spec_has_temporal():
@@ -76,9 +105,7 @@ def test_prove_invalid_k():
 
 
 def test_prove_unknown_exits_nonzero(capsys):
-    code, _, _ = _run(
-        capsys, "prove", str(NON_INDUCTIVE), "--bound", "1", "--timeout", "60000"
-    )
+    code, _, _ = _run(capsys, "prove", str(NON_INDUCTIVE), "--bound", "1", "--timeout", "60000")
     assert code == EXIT_VIOLATION
 
 

@@ -1,0 +1,31 @@
+# A collection whose size is tied to a counter.
+#
+# The hypothesis states of the k-induction must not contain a size that no
+# implementation could produce.  Without the well-formedness constraint that
+# ties a collection's size counter to the slots that are present, the
+# inductive step never closes, and the counterexample the tool prints has a
+# hypothesis state that violates the very invariant it is claimed to satisfy.
+spec_version: "1.0"
+name: InductiveCollection
+description: A set whose size always matches a counter, and both are inductive.
+vars:
+  seen:
+    type: set
+    of: str
+    elem_domain: [r1, r2]
+    max_size: 2
+  applied: {type: int, min: 0, max: 100}
+init:
+  seen: []
+  applied: "0"
+actions:
+  - name: apply
+    params:
+      request_id: {type: "enum[r1,r2]"}
+    requires: ["request_id not in seen"]
+    effects:
+      seen: "set_add(seen, request_id)"
+      applied: "applied + 1"
+invariants:
+  - {name: applied_matches_seen, expr: "len(seen) == applied"}
+  - {name: applied_bounded, expr: "applied <= 2"}
