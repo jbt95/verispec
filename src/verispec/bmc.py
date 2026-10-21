@@ -36,7 +36,11 @@ from .values import value_to_json
 __all__ = ["check", "format_result", "GUARANTEE_BOUNDED"]
 
 
-from .guarantees import GUARANTEE_BOUNDED, scope_note  # noqa: F401  (re-exported)
+from .guarantees import (  # noqa: F401  (re-exported)
+    GUARANTEE_BOUNDED,
+    note_for,
+    scope_note,
+)
 
 # --------------------------------------------------------------------------
 # state encoding
@@ -858,8 +862,10 @@ def format_result(spec: Spec, result: dict[str, Any]) -> str:
     """Human readable rendering of a check result."""
     if result["status"] == "ok":
         guarantee = result.get("guarantee", GUARANTEE_BOUNDED)
+        # The note comes from the shared vocabulary, so it cannot contradict
+        # the label: "proved" never gets the "bounded claim only" note.
         return (
-            f"{result['message']}  (bounded claim only, not a proof for all depths; "
+            f"{result['message']}  ({note_for(guarantee)}; "
             f"guarantee: {guarantee}; {scope_note(guarantee)})"
         )
     if result["status"] != "violation":

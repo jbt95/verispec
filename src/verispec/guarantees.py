@@ -35,6 +35,7 @@ __all__ = [
     "EVIDENCE_LEVELS",
     "scope_of",
     "scope_note",
+    "note_for",
     "describe",
     "evidence",
     "is_at_least",
@@ -141,22 +142,25 @@ def combine(parts: Iterable[str | None]) -> str:
     safety check and a liveness check calls this with the two labels, and
     the result says both - or neither.
     """
-    seen: list[str] = []
+    seen: set[str] = set()
+    out: list[str] = []
     for part in parts:
         if not part:
             continue
         label = str(part)
-        # "bounded-proved(8)" and "bounded-proved(k)" are the same label with
-        # the bound filled in; keep the first one that carries a number.
+        # "bounded-proved(8)" and "bounded-proved(k)" are the same kind of
+        # guarantee, so only one of them is kept - but the one that is kept
+        # is the one that carries the bound.
         base = _base_label(label)
         if base in seen:
             continue
-        seen.append(base)
-    if not seen:
+        seen.add(base)
+        out.append(label)
+    if not out:
         return GUARANTEE_UNKNOWN
-    if len(seen) == 1:
-        return seen[0]
-    return "; ".join(seen)
+    if len(out) == 1:
+        return out[0]
+    return "; ".join(out)
 
 
 def _base_label(label: str) -> str:
@@ -181,6 +185,34 @@ def describe(label: str) -> str:
     if scope == "implementation":
         return text
     return text
+
+
+def note_for(label: str) -> str:
+    """What a label covers, in one sentence, part by part.
+
+    A label can be several guarantees at once - "proved; bounded-liveness-
+    proved(k)" - and the note has to say what each part covers, or it
+    contradicts the label it explains.
+    """
+    parts: list[str] = []
+    for part in label.split(";"):
+        part = part.strip()
+        if not part:
+            continue
+        base = _base_label(part)
+        if base == GUARANTEE_PROVED:
+            parts.append("the safety invariants are proved for all depths")
+        elif base == GUARANTEE_LIVENESS:
+            parts.append("the liveness claim is bounded")
+        elif base == GUARANTEE_CONCURRENT:
+            parts.append("the interleavings are explored up to the bound")
+        elif base == GUARANTEE_CONFORMANCE:
+            parts.append("the trace conformed")
+        elif base == GUARANTEE_PENDING:
+            parts.append("the trace conformed; an obligation is still pending")
+        else:
+            parts.append("bounded claim only, not a proof for all depths")
+    return "; ".join(parts) or "bounded claim only, not a proof for all depths"
 
 
 def scope_note(label: str) -> str:

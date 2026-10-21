@@ -312,6 +312,15 @@ export function veriKeys(m: any): string[] {
   return Object.keys(m);
 }
 
+// The coverage events of one run.  A property test that says nothing about
+// what it exercised cannot tell you which parts of the contract your suite
+// never reaches.
+export const VERISPEC_EVENTS: any[] = [];
+
+export function veriEvent(event: any): void {
+  VERISPEC_EVENTS.push(event);
+}
+
 export function veriCountValues(m: any, v: any): number {
   let n = 0;
   for (const key of Object.keys(m)) {
@@ -417,6 +426,12 @@ export function veriKeys(m) {
   return Object.keys(m);
 }
 
+export const VERISPEC_EVENTS = [];
+
+export function veriEvent(event) {
+  VERISPEC_EVENTS.push(event);
+}
+
 export function veriCountValues(m, v) {
   let n = 0;
   for (const key of Object.keys(m)) {
@@ -500,6 +515,7 @@ def _gen_js_family(spec: Spec, adapter_import: str | None, javascript: bool) -> 
     )
     lines.append("// The spec expressions are transpiled from the same AST the Z3 checker uses.")
     lines.append("import * as fc from 'fast-check';")
+    lines.append("import { writeFileSync } from 'node:fs';")
     if adapter_import:
         lines.append(f"import {{ makeAdapter }} from {adapter_import!r};".replace("'", '"'))
     lines.append(JS_RUNTIME if javascript else TS_RUNTIME)
@@ -547,6 +563,18 @@ def _gen_js_family(spec: Spec, adapter_import: str | None, javascript: bool) -> 
                 f"export const requires_{a.name} = (state: any, params: any): boolean => "
                 f"({' && '.join(req_ts)});"
             )
+        # The guards, one by one: `requires` is their conjunction, and a
+        # coverage report wants to know which of them held.
+        if javascript:
+            guards = ", ".join(
+                f"(state, params) => ({to_ts(r, tenv, var_names)})" for r in a.requires
+            )
+        else:
+            guards = ", ".join(
+                f"(state: any, params: any): boolean => ({to_ts(r, tenv, var_names)})"
+                for r in a.requires
+            )
+        lines.append(f"export const guards_{a.name} = [{guards}];")
         eff_parts = []
         for k, e in a.effects.items():
             var = spec.vars[k]
@@ -628,6 +656,17 @@ def _gen_js_family(spec: Spec, adapter_import: str | None, javascript: bool) -> 
         )
     lines.append("];")
     lines.append("")
+    any_type = "" if javascript else ": any"
+    lines.append(f"const GUARDS{any_type} = {{")
+    for a in spec.actions:
+        lines.append(f"  {json.dumps(a.name)}: guards_{a.name},")
+    lines.append("};")
+    lines.append("")
+    lines.append(f"const INVARIANT_FNS{any_type} = {{")
+    for inv in spec.invariants:
+        lines.append(f"  {json.dumps(inv['name'])}: invariant_{inv['name']},")
+    lines.append("};")
+    lines.append("")
     lines.append(
         "const STEP = fc.oneof(...ACTIONS.map((a) => fc.record({ action: fc.constant(a.name), params: a.params })));"
     )
@@ -638,9 +677,10 @@ def _gen_js_family(spec: Spec, adapter_import: str | None, javascript: bool) -> 
         lines.append(
             "export function runConformance("
             "makeAdapter: () => any,"
-            " options?: { seed?: number; numRuns?: number },"
+            " options?: { seed?: number; numRuns?: number; events?: string },"
             "): void {"
         )
+    lines.append("  try {")
     lines.append("  fc.assert(")
     lines.append("    fc.property(fc.array(STEP, { maxLength: 25 }), (steps) => {")
     lines.append("      const adapter = makeAdapter();")
@@ -653,7 +693,12 @@ def _gen_js_family(spec: Spec, adapter_import: str | None, javascript: bool) -> 
     lines.append("      for (const step of steps) {")
     lines.append("        const a = ACTIONS.find((x) => x.name === step.action);")
     lines.append("        const params = step.params;")
+    lines.append("        const guards = GUARDS[a.name] || [];")
+    lines.append("        for (let gi = 0; gi < guards.length; gi += 1) {")
+    lines.append("          veriEvent({ type: \"guard\", action: a.name, index: gi, passed: guards[gi](prev, params) });")
+    lines.append("        }")
     lines.append("        if (!a.requires(prev, params)) continue;")
+    lines.append("        veriEvent({ type: \"action\", action: a.name, params: params });")
     lines.append("        const expected = a.effects(prev, params);")
     lines.append("        adapter.apply(a.name, params);")
     lines.append("        const state = adapter.snapshot();")
@@ -661,6 +706,9 @@ def _gen_js_family(spec: Spec, adapter_import: str | None, javascript: bool) -> 
     lines.append(
         "          throw new Error(`effect mismatch ${a.name}: expected ${JSON.stringify(expected)} got ${JSON.stringify(state)}`);"
     )
+    lines.append("        for (const name of Object.keys(INVARIANT_FNS)) {")
+    lines.append("          if (INVARIANT_FNS[name](state)) veriEvent({ type: \"invariant\", name: name });")
+    lines.append("        }")
     lines.append("        checkInvariants(state);")
     lines.append("        prev = state;")
     lines.append("      }")
@@ -675,6 +723,11 @@ def _gen_js_family(spec: Spec, adapter_import: str | None, javascript: bool) -> 
         " : undefined,"
     )
     lines.append("  );")
+    lines.append("  } finally {")
+    lines.append("    if (options !== undefined && options.events !== undefined) {")
+    lines.append("      writeFileSync(options.events, JSON.stringify({ events: VERISPEC_EVENTS }, null, 2) + \"\\n\");")
+    lines.append("    }")
+    lines.append("  }")
     lines.append("}")
     lines.append("")
     if adapter_import:

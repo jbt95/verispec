@@ -391,7 +391,12 @@ def _infer_call(node: ast.Call, tenv: dict[str, TypeSpec]) -> TypeSpec:
         if not isinstance(mt, MapType):
             raise SpecError(f"count_values() needs a map, got {type_name(mt)}")
         vt = infer_type(args[1], tenv)
-        if vt.kind != mt.value.kind:
+        # An enum value *is* a string, so a literal may be compared with an
+        # enum-valued map.
+        if not (
+            vt.kind == mt.value.kind
+            or {vt.kind, mt.value.kind} == {"str", "enum"}
+        ):
             raise SpecError(
                 f"count_values() compares against {type_name(vt)}, but the map "
                 f"holds {type_name(mt.value)}"

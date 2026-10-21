@@ -111,6 +111,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="attempt an unbounded invariant proof (k-induction) instead of bounded BMC",
     )
     sp.add_argument(
+        "--no-prove",
+        dest="prove",
+        action="store_false",
+        help="do not attempt the unbounded proof when the bounded check passes",
+    )
+    sp.add_argument(
+        "--prove-k",
+        type=int,
+        default=1,
+        dest="induction_k",
+        help="the k of the k-induction attempted after a passing bounded check",
+    )
+    sp.add_argument(
         "--induction-k",
         type=int,
         default=1,

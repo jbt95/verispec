@@ -110,6 +110,46 @@ def cmd_check(args) -> int:
     else:
         result = check(spec, **config.to_bmc_kwargs())
         result = apply_liveness(spec, config, result)
+        # The strongest guarantee should not be opt-in.  When the contract
+        # is inductive, say so: "proved" is a different claim from
+        # "bounded-proved(k)", and a reader should not have to ask for it.
+        if result.get("status") == "ok" and getattr(args, "prove", True):
+            proof = prove(
+                spec,
+                k=getattr(args, "induction_k", 1),
+                invariant_filter=args.invariant,
+                timeout_ms=args.timeout,
+                method=getattr(args, "proof_method", "induction"),
+                precheck_bound=args.bound,
+            )
+            if proof.get("status") == "ok":
+                # The label is assembled from every check that ran, so the
+                # liveness evidence is not lost when the proof succeeds.
+                from .guarantees import combine
+
+                liveness = result.get("liveness")
+                result["guarantee"] = combine(
+                    [
+                        proof.get("guarantee"),
+                        liveness.get("guarantee") if isinstance(liveness, dict) else None,
+                    ]
+                )
+                result["proof"] = {
+                    "status": proof.get("status"),
+                    "guarantee": proof.get("guarantee"),
+                    "induction_k": proof.get("induction_k"),
+                    "message": proof.get("message"),
+                }
+            else:
+                # The contract is not inductive: the bounded claim stands,
+                # and the report says why the stronger one is not available.
+                result["proof"] = {
+                    "status": proof.get("status", "unknown"),
+                    "guarantee": proof.get("guarantee", "unknown"),
+                    "message": proof.get("message"),
+                    "diagnosis": proof.get("diagnosis"),
+                    "diagnosis_detail": proof.get("diagnosis_detail"),
+                }
     result["duration_ms"] = int((time.monotonic() - started) * 1000)
     payload = _check_payload(spec, result, extra={"command": command_name})
     if args.format == "json":
