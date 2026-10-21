@@ -21,6 +21,7 @@ from .cli_commands import (
     cmd_export_lean,
     cmd_export_tla,
     cmd_gen_harness,
+    cmd_gen_suite,
     cmd_gen_tests,
     cmd_init,
     cmd_lint,
@@ -197,6 +198,34 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--invariant", help="only check this invariant")
     _add_format(sp)
     sp.set_defaults(func=cmd_check_concurrent)
+
+    sp = sub.add_parser(
+        "gen-suite", help="generate a whole conformance suite for an adapter"
+    )
+    sp.add_argument("spec")
+    sp.add_argument(
+        "--lang",
+        default="typescript",
+        help="typescript or javascript",
+    )
+    sp.add_argument("-o", "--output", help="output file (default: stdout)")
+    sp.add_argument(
+        "--adapter", help="the import path of the adapter (the project's own)"
+    )
+    sp.add_argument(
+        "--adapter-class", help="the name of the adapter class (default: from the spec name)"
+    )
+    sp.add_argument(
+        "--trace", help="where the recorded trace is written (default: traces/<name>.json)"
+    )
+    sp.add_argument(
+        "--seed",
+        type=int,
+        default=20260121,
+        help="the seed of the property test, so that the suite is deterministic",
+    )
+    _add_format(sp)
+    sp.set_defaults(func=cmd_gen_suite)
 
     sp = sub.add_parser("gen-tests", help="generate property tests for an adapter")
     sp.add_argument("spec")

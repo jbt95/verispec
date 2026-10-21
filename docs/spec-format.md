@@ -962,6 +962,7 @@ detail elsewhere; this is the map.
 | `verispec check <spec> [--bound N] [--invariant NAME] [--timeout MS] [--format text\|json\|sarif]` | Bounded model check the spec with Z3. |
 | `verispec check-trace <spec> <trace.json> [--format text\|json\|sarif]` | Check that a real implementation follows the spec. |
 | `verispec gen-tests <spec> --lang python\|typescript\|javascript\|go\|rust\|c\|java -o FILE [--adapter X] [--package NAME]` | Generate property tests for an adapter. |
+| `verispec gen-suite <spec> [--lang typescript\|javascript] [-o FILE] [--adapter X] [--adapter-class NAME] [--trace PATH] [--seed N]` | Generate a whole conformance suite: the property test, the initial-state check and the recorded trace. |
 | `verispec export-tla <spec> -o FILE` | Export the spec as a TLA+ module. |
 | `verispec export-lean <spec> -o FILE` | Export the spec as a Lean 4 skeleton. |
 | `verispec brief <spec> [-o FILE]` | Generate the agent brief. |

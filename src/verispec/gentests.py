@@ -551,6 +551,113 @@ def _gen_js_family(spec: Spec, adapter_import: str | None, javascript: bool) -> 
         lines.append(f"export const SPEC_INIT: SpecState = {_init_json(spec)};")
     lines.append("")
 
+    # The parts of a conformance suite the contract determines.  A project
+    # should not have to write the same three checks again for every
+    # contract it owns, and a check that is written by hand is a check
+    # that is written slightly differently every time.
+    if javascript:
+        lines.append("""
+/**
+ * The implementation must start in the state the contract starts in.
+ *
+ * A suite that does not check this can pass against an implementation that
+ * comes up in the wrong state: every later check would be about a state
+ * the contract never asked for.
+ */
+export function checkInit(makeAdapter) {
+  const adapter = makeAdapter();
+  adapter.reset();
+  const state = adapter.snapshot();
+  if (!veriEqual(state, SPEC_INIT)) {
+    throw new Error(
+      "the implementation does not start in the state the contract starts in: "
+        + "expected " + JSON.stringify(SPEC_INIT) + " got " + JSON.stringify(state),
+    );
+  }
+  return state;
+}
+
+/**
+ * Record what the implementation did, in the trace format the checker
+ * reads.  The steps are the ones the contract allows; a step the
+ * implementation refuses is recorded as it happened.
+ */
+export function recordTrace(makeAdapter, steps) {
+  const adapter = makeAdapter();
+  adapter.reset();
+  const trace = [{ action: "init", params: {}, state: adapter.snapshot() }];
+  for (const step of steps) {
+    const name = typeof step === "string" ? step : step.action;
+    const params = typeof step === "string" ? {} : step.params || {};
+    try {
+      adapter.apply(name, params);
+    } catch (error) {
+      trace.push({ action: name, params: params, state: adapter.snapshot(), error: String(error) });
+      break;
+    }
+    trace.push({ action: name, params: params, state: adapter.snapshot() });
+  }
+  return trace;
+}
+
+/** Write a recorded trace where the trace checker can read it. */
+export function writeTrace(path, trace) {
+  writeFileSync(path, JSON.stringify(trace, null, 2) + "\\n");
+  return path;
+}
+""")
+    else:
+        lines.append("""
+/**
+ * The implementation must start in the state the contract starts in.
+ *
+ * A suite that does not check this can pass against an implementation that
+ * comes up in the wrong state: every later check would be about a state
+ * the contract never asked for.
+ */
+export function checkInit(makeAdapter: () => any): any {
+  const adapter = makeAdapter();
+  adapter.reset();
+  const state = adapter.snapshot();
+  if (!veriEqual(state, SPEC_INIT)) {
+    throw new Error(
+      "the implementation does not start in the state the contract starts in: "
+        + "expected " + JSON.stringify(SPEC_INIT) + " got " + JSON.stringify(state),
+    );
+  }
+  return state;
+}
+
+/**
+ * Record what the implementation did, in the trace format the checker
+ * reads.  The steps are the ones the contract allows; a step the
+ * implementation refuses is recorded as it happened.
+ */
+export function recordTrace(makeAdapter: () => any, steps: any[]): any[] {
+  const adapter = makeAdapter();
+  adapter.reset();
+  const trace: any[] = [{ action: "init", params: {}, state: adapter.snapshot() }];
+  for (const step of steps) {
+    const name = typeof step === "string" ? step : step.action;
+    const params = typeof step === "string" ? {} : step.params || {};
+    try {
+      adapter.apply(name, params);
+    } catch (error) {
+      trace.push({ action: name, params: params, state: adapter.snapshot(), error: String(error) });
+      break;
+    }
+    trace.push({ action: name, params: params, state: adapter.snapshot() });
+  }
+  return trace;
+}
+
+/** Write a recorded trace where the trace checker can read it. */
+export function writeTrace(path: string, trace: any[]): string {
+  writeFileSync(path, JSON.stringify(trace, null, 2) + "\\n");
+  return path;
+}
+""")
+
     for a in spec.actions:
         tenv = spec.tenv(a)
         req_ts = [to_ts(r, tenv, var_names) for r in a.requires] or ["true"]

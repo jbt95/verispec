@@ -165,6 +165,21 @@ verispec gen-tests specs/bank.verispec.yaml --lang typescript -o src/bank.verisp
 verispec gen-tests specs/bank.verispec.yaml --lang go -o bank/bank_verispec_test.go
 ```
 
+The property test is only part of a conformance suite. `verispec gen-suite`
+writes the whole thing — the property test, the check that the
+implementation starts in the state the contract starts in, and a recorded
+trace in the format the checker reads:
+
+```bash
+verispec gen-suite specs/bank.verispec.yaml \
+  --adapter ../src/bank-adapter.js --adapter-class BankAdapter \
+  -o conformance/bank.conformance.test.ts
+```
+
+The one check it cannot write for you is the one that matters most: a
+*broken* implementation, to prove the suite can fail. The generated file
+says where it goes and what it must look like.
+
 Or replay a trace recorded by your real code:
 
 ```bash

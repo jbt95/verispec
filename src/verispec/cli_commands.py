@@ -340,6 +340,39 @@ def cmd_gen_tests(args) -> int:
     return EXIT_OK
 
 
+def cmd_gen_suite(args) -> int:
+    """Generate a whole conformance suite, not just the property test."""
+    from .gensuite import gen_suite
+
+    spec = _load_spec_or_die(args.spec)
+    code = gen_suite(
+        spec,
+        lang=args.lang,
+        adapter=args.adapter,
+        adapter_class=args.adapter_class,
+        trace_path=args.trace,
+        seed=args.seed,
+    )
+    if args.output:
+        Path(args.output).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.output).write_text(code)
+        if args.format == "json":
+            _print_json(
+                {
+                    "tool": "verispec",
+                    "command": "gen-suite",
+                    "spec": _spec_payload(spec),
+                    "lang": args.lang,
+                    "output": str(args.output),
+                }
+            )
+        else:
+            print(f"wrote the {args.lang} suite to {args.output}")
+    else:
+        print(code)
+    return EXIT_OK
+
+
 def cmd_export_tla(args) -> int:
     from .tla import export_tla
 
