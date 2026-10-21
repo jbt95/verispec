@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 from typing import Any
 
 from .errors import SpecError
@@ -89,10 +90,8 @@ def _locate(index: SpecSourceIndex, where: str, code: str) -> tuple[int, int]:
     return 0, 0
 
 
-import functools as _functools
 
-
-@_functools.lru_cache(maxsize=64)
+@functools.lru_cache(maxsize=64)
 def _file_lines_for(path: str) -> tuple[str, ...]:
     try:
         from pathlib import Path

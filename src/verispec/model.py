@@ -267,8 +267,8 @@ class Spec:
             self._action_map = cache
         try:
             return cache[name]
-        except KeyError:
-            raise SpecError(f"unknown action {name!r}")
+        except KeyError as e:
+            raise SpecError(f"unknown action {name!r}") from e
 
     def has_action(self, name: str) -> bool:
         return any(a.name == name for a in self.actions)
@@ -620,9 +620,9 @@ def _apply_imports(spec: Spec, path: str) -> None:
 
 def _rename_expr(expr: str, mapping: dict[str, str]) -> str:
     """Rename the state variables referenced by an expression."""
-    from .expr import parse_expr
-
     import copy
+
+    from .expr import parse_expr
 
     tree = copy.deepcopy(parse_expr(expr))
     for node in ast.walk(tree):
