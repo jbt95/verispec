@@ -232,15 +232,18 @@ def check_temporal_bounded(
             "bound": bound,
             "message": "no temporal properties to check",
             "guarantee": GUARANTEE_BOUNDED_LIVENESS.replace("(k)", f"({bound})"),
+            "properties": [],
         }
     for k in range(2, bound + 1):
         for prop in props:
             r = _check_liveness_one(spec, prop, bound=k, timeout_ms=timeout_ms)
             if r["status"] == "violation":
                 r["max_bound"] = bound
+                r["properties"] = [p.name for p in props]
                 return r
             if r["status"] == "unknown":
                 r["max_bound"] = bound
+                r["properties"] = [p.name for p in props]
                 return r
     return {
         "status": "ok",
@@ -248,6 +251,7 @@ def check_temporal_bounded(
         "max_bound": bound,
         "message": f"no liveness counterexample up to bound {bound}",
         "guarantee": GUARANTEE_BOUNDED_LIVENESS.replace("(k)", f"({bound})"),
+        "properties": [p.name for p in props],
     }
 
 
@@ -541,7 +545,12 @@ def merge_check_with_liveness(safety: dict[str, Any], liveness: dict[str, Any]) 
     """Combine safety BMC output with a temporal liveness result."""
     if safety.get("status") != "ok":
         return safety
-    if liveness.get("status") == "ok" and not liveness.get("property"):
+    # Nothing was checked: the spec declares no temporal property, or the
+    # filter selected none.  A liveness result that *did* check something
+    # is always merged, so that its guarantee is reported.
+    if liveness.get("status") == "ok" and not liveness.get("property") and not liveness.get(
+        "properties"
+    ):
         return safety
     merged = dict(safety)
     merged["liveness"] = liveness
