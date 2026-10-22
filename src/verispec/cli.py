@@ -47,6 +47,13 @@ from .cli_commands import (  # noqa: F401
     cmd_validate,
     cmd_verify_loop,
     cmd_verify_signature,
+    cmd_check_verus,
+    cmd_draft,
+    cmd_evidence,
+    cmd_export_verus,
+    cmd_observe_browser,
+    cmd_plan_link,
+    cmd_spec_diff,
     cmd_version,
     cmd_view,
 )

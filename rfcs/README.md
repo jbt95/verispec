@@ -135,6 +135,13 @@ Open questions for the maintainers and the community. Be specific.
 | [RFC-0005](0005-spec-strength-semantics.md) | The semantics of `verispec spec-strength` | ACCEPTED | What "the spec is weak" means, so the check cannot cry wolf. |
 | [RFC-0006](0006-fine-grained-drift.md) | Fine-grained drift mapping | IMPLEMENTED | Invariants may name their implementation, and the drift checker compares each action and each invariant with its own contract instead of one digest per file. |
 
+| [RFC-0007](0007-draft-specs-and-provenance.md) | Draft specs and provenance | ACCEPTED | Draft status/source/rationale. |
+| [RFC-0008](0008-per-property-evidence-model.md) | Per-property evidence model | ACCEPTED | Evidence levels. |
+| [RFC-0009](0009-verus-translation-semantics.md) | Verus translation semantics | ACCEPTED | Verus export. |
+| [RFC-0010](0010-evidence-escalation-and-failure-taxonomy.md) | Evidence escalation and failure taxonomy | ACCEPTED | Failure reasons. |
+| [RFC-0011](0011-intent-traceability-traces_to.md) | Intent traceability (traces_to) | ACCEPTED | traces_to. |
+| [RFC-0012](0012-browser-and-cua-observation-sources.md) | Browser and CUA observation sources | ACCEPTED | observe-browser. |
+
 ## Relationship with ADRs
 
 An ADR records a decision. An RFC designs a change to the spec format.

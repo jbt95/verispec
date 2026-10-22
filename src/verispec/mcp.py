@@ -22,6 +22,7 @@ from typing import Any, TextIO
 from . import __version__
 from .expr import SpecError
 from .model import Spec, load_spec
+from pathlib import Path
 from .sign import spec_digest
 
 __all__ = ["serve", "handle_request", "TOOLS"]
@@ -84,6 +85,29 @@ TOOLS = [
     {
         "name": "list_invariants",
         "description": "List the invariants of a VeriSpec spec with their expressions.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"spec_path": {"type": "string"}},
+            "required": ["spec_path"],
+        },
+    },
+    {
+        "name": "draft_spec_context",
+        "description": "Return spec format, templates, registry examples and lint rules for drafting.",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "validate_draft",
+        "description": "Validate a draft spec: run validate, lint and spec-strength.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"spec_path": {"type": "string"}},
+            "required": ["spec_path"],
+        },
+    },
+    {
+        "name": "draft_questions",
+        "description": "Return open questions for a draft spec.",
         "inputSchema": {
             "type": "object",
             "properties": {"spec_path": {"type": "string"}},
@@ -172,6 +196,12 @@ def _call_tool(params: dict[str, Any]) -> dict[str, Any]:
         text, is_error = _tool_describe(args)
     elif name == "list_invariants":
         text, is_error = _tool_invariants(args)
+    elif name == "draft_spec_context":
+        text, is_error = _tool_draft_context(args)
+    elif name == "validate_draft":
+        text, is_error = _tool_validate_draft(args)
+    elif name == "draft_questions":
+        text, is_error = _tool_draft_questions(args)
     else:
         return {
             "content": [{"type": "text", "text": f"unknown tool {name!r}"}],
@@ -347,6 +377,69 @@ def _handle_json_line(line: str) -> dict[str, Any] | list[dict[str, Any]] | None
     responses = [response for item in request if (response := handle_request(item))]
     return responses or None
 
+
+
+def _tool_draft_context(args: dict[str, Any]) -> tuple[str, bool]:
+    from . import templates
+    from .registry import list_entries
+    try:
+        entries = list_entries() if False else []
+    except Exception:
+        entries = []
+    payload = {
+        "templates": templates.template_names(),
+        "formats": ["spec_version", "meta", "vars", "init", "actions", "invariants"],
+        "lint_rules": ["no vacuous invariants", "requires present", "no weak specs"],
+        "registry_examples": entries,
+    }
+    return json.dumps(payload, indent=2), False
+
+
+def _tool_validate_draft(args: dict[str, Any]) -> tuple[str, bool]:
+    spec_path = args.get("spec_path")
+    if not isinstance(spec_path, str) or not spec_path:
+        return "spec_path must be a non-empty string", True
+    try:
+        spec = load_spec(spec_path)
+    except Exception as e:
+        return str(e), True
+    try:
+        from .lint import lint_spec
+        lint_result = lint_spec(spec)
+    except Exception as e:
+        lint_result = {"error": str(e)}
+    try:
+        from .spec_strength import run_spec_strength
+        strength = run_spec_strength(spec)
+        if hasattr(strength, "to_dict"):
+            strength = strength.to_dict()
+    except Exception as e:
+        strength = {"error": str(e)}
+    payload = {
+        "valid": True,
+        "lint": lint_result,
+        "spec_strength": strength,
+        "is_draft": getattr(spec, "meta", {}).get("status") == "draft",
+    }
+    return json.dumps(payload, indent=2), False
+
+
+def _tool_draft_questions(args: dict[str, Any]) -> tuple[str, bool]:
+    spec_path = args.get("spec_path")
+    if not isinstance(spec_path, str) or not spec_path:
+        return "spec_path must be a non-empty string", True
+    try:
+        spec = load_spec(spec_path)
+    except Exception as e:
+        return str(e), True
+    from .draft import open_questions
+    import tempfile, os
+    # reconstruct yaml from spec? Use file text
+    text = Path(spec_path).read_text() if False else None
+    # read original file
+    text = Path(spec_path).read_text(encoding="utf-8")
+    qs = open_questions(text)
+    return json.dumps({"questions": qs}, indent=2), False
 
 def serve(stdin: TextIO | None = None, stdout: TextIO | None = None) -> int:
     """Run the MCP server on stdio until the client closes the connection."""

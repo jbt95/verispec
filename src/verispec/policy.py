@@ -50,6 +50,7 @@ class PolicyEntry:
     bound: int = 10
     trace: str | None = None
     signature: str | None = None
+    critical_properties: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -161,6 +162,17 @@ def load_policy(path: str | Path) -> PolicyDocument:
         if signature is not None and not isinstance(signature, str):
             raise SpecError(f"policy entry {name!r}: signature must be a string path")
 
+        critical_properties = (
+            item.get("critical_properties")
+            or item.get("critical")
+            or item.get("properties")
+            or []
+        )
+        if isinstance(critical_properties, str):
+            critical_properties = [critical_properties]
+        if not isinstance(critical_properties, list) or not all(isinstance(x, str) for x in critical_properties):
+            raise SpecError(f"policy entry {name!r}: critical_properties must be a list of strings")
+
         entries.append(
             PolicyEntry(
                 name=name,
@@ -173,6 +185,7 @@ def load_policy(path: str | Path) -> PolicyDocument:
                 bound=bound,
                 trace=str(trace) if trace else None,
                 signature=signature,
+                critical_properties=[str(x) for x in critical_properties],
             )
         )
 
@@ -268,6 +281,55 @@ def _check_entry(repo_root: Path, entry: PolicyEntry) -> list[PolicyFinding]:
             )
         )
         return findings
+
+    # Draft specs never count as approved.
+    if getattr(spec, "meta", {}).get("status") == "draft":
+        findings.append(
+            PolicyFinding(
+                entry.name,
+                "draft-spec",
+                "error",
+                "spec is still a draft (meta.status: draft)",
+                str(spec_path),
+            )
+        )
+
+    # Critical properties (optional per-property minimums).
+    crit = []
+    for key in ("critical_properties", "critical", "properties"):
+        val = getattr(entry, key, None)
+        # PolicyEntry doesn't have these fields; check raw? We'll read from entry via attribute if added.
+    # Since PolicyEntry lacks fields, read from a dict stored on entry? Instead parse raw in load_policy.
+    # We'll handle via entry attribute if present.
+    crit_props = getattr(entry, "critical_properties", None) or []
+    if crit_props:
+        from .prove import prove as _prove
+        for prop in crit_props:
+            if _GUARANTEE_ORDER[entry.min_guarantee] >= _GUARANTEE_ORDER["proved"]:
+                pr = _prove(spec, k=1, invariant_filter=prop, timeout_ms=30000, precheck_bound=entry.bound)
+                if pr.get("status") != "ok":
+                    findings.append(
+                        PolicyFinding(
+                            entry.name,
+                            "guarantee-proved",
+                            "error",
+                            f"critical property {prop!r} was not proved",
+                            str(spec_path),
+                        )
+                    )
+            elif _GUARANTEE_ORDER[entry.min_guarantee] >= _GUARANTEE_ORDER["bounded-proved"]:
+                from .bmc import check as _bmc
+                br = _bmc(spec, bound=entry.bound, invariant_filter=prop)
+                if br.get("status") != "ok":
+                    findings.append(
+                        PolicyFinding(
+                            entry.name,
+                            "guarantee-bounded-proved",
+                            "error",
+                            f"critical property {prop!r} did not reach ok",
+                            str(spec_path),
+                        )
+                    )
 
     for pattern in entry.paths:
         hits = _match_paths(repo_root, [pattern])

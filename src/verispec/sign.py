@@ -62,6 +62,8 @@ def sign_spec(
     sigstore_issuer: str | None = None,
 ) -> dict[str, Any]:
     """Build a signature document for a spec."""
+    if getattr(spec, "meta", {}).get("status") == "draft":
+        raise SpecError("cannot sign a spec while meta.status is 'draft'; remove the draft mark first")
     digest = spec_digest(spec)
     doc: dict[str, Any] = {
         "signature_version": SIGNATURE_VERSION,

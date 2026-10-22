@@ -62,6 +62,8 @@ class VerificationCheck:
     message: str = ""
     guarantee: str | None = None
     counterexample: dict[str, Any] | None = None
+    failure_reason: str | None = None
+    suggestion: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {
@@ -79,6 +81,10 @@ class VerificationCheck:
             out["guarantee"] = self.guarantee
         if self.counterexample:
             out["counterexample"] = self.counterexample
+        if self.failure_reason:
+            out["failure_reason"] = self.failure_reason
+        if self.suggestion:
+            out["suggestion"] = self.suggestion
         return out
 
 
@@ -210,6 +216,7 @@ def _apply_trace_round(
             trace_check.status = "violated"
             trace_check.backend = _BACKEND_TRACE
             trace_check.guarantee = "violation-found"
+            trace_check.failure_reason = "code-defect"
             step = result.get("failed_step")
             trace_check.evidence_location = (
                 f"trace step {step}: {result.get('reason', 'violation')}"
@@ -238,6 +245,7 @@ def _apply_trace_round(
                 inv_check.status = "violated"
                 inv_check.backend = _BACKEND_TRACE
                 inv_check.guarantee = "violation-found"
+                inv_check.failure_reason = "code-defect"
                 inv_check.evidence_location = (
                     f"trace step {i}, state variables: "
                     + ", ".join(_vars_in_expr(inv_check.condition, spec))
@@ -279,6 +287,7 @@ def _apply_fuzz_round(
             inv_check.status = "violated"
             inv_check.backend = _BACKEND_FUZZ
             inv_check.guarantee = "violation-found"
+            inv_check.failure_reason = "code-defect"
             inv_check.evidence_location = (
                 f"simulated step {ce['step']}, state variables: "
                 + ", ".join(_vars_in_expr(inv_check.condition, spec))
@@ -313,6 +322,8 @@ def _apply_z3_round(
             inv_check.status = "violated"
             inv_check.backend = _BACKEND_Z3
             inv_check.guarantee = "violation-found"
+            inv_check.failure_reason = "code-defect"
+            inv_check.suggestion = "fix the implementation to satisfy the invariant"
             v0 = (result.get("violations") or [{}])[0]
             step = v0.get("step", result.get("bound"))
             inv_check.evidence_location = (
@@ -336,6 +347,15 @@ def _apply_z3_round(
             inv_check.backend = _BACKEND_Z3
             inv_check.guarantee = "unknown"
             inv_check.message = result.get("message", "solver could not decide")
+            msg = result.get("message", "") + " " + str(result.get("reason", ""))
+            if "timeout" in msg.lower():
+                inv_check.failure_reason = "solver-timeout"
+                inv_check.suggestion = "increase timeout or reduce bound"
+            elif "unsupported" in msg.lower():
+                inv_check.failure_reason = "unsupported-construct"
+                inv_check.suggestion = "simplify the spec construct"
+            else:
+                inv_check.failure_reason = inv_check.failure_reason or "non-inductive"
     return False
 
 
@@ -369,6 +389,7 @@ def _semantic_strength_checks(
                 evidence_location=finding.where or "spec",
                 status="violated",
                 backend="z3-vacuity",
+                failure_reason="contradictory-spec",
                 message=finding.message,
             )
         )
@@ -417,6 +438,8 @@ def run_verify_loop(
     semantic_strength: bool = False,
     io_cases: list[IoCase] | None = None,
     reference: Spec | None = None,
+    escalate: bool = False,
+    prove_k: int = 1,
 ) -> VerificationReport:
     """Run escalating verification; stop at the first violated check."""
     if max_rounds < 1:
@@ -452,6 +475,43 @@ def run_verify_loop(
                     stopped_at=c.check_id,
                 )
     checks.extend(_invariant_checks(spec))
+    if escalate:
+        from .prove import prove as _prove
+        for c in checks:
+            if c.kind != "invariant" or c.status != "unresolved":
+                continue
+            inv_name = c.check_id.split(":", 1)[1]
+            try:
+                pr = _prove(spec, k=prove_k, invariant_filter=inv_name, timeout_ms=timeout_ms, precheck_bound=5)
+            except Exception as e:
+                pr = {"status": "unknown", "message": str(e)}
+            if pr.get("status") == "ok":
+                c.status = "satisfied"
+                c.backend = "prove"
+                c.guarantee = "proved"
+                c.message = pr.get("message", "")
+            elif pr.get("status") == "violation":
+                c.status = "violated"
+                c.backend = "prove"
+                c.guarantee = "violation-found"
+                c.failure_reason = "code-defect"
+                c.counterexample = pr.get("induction_cex") or pr.get("trace")
+                c.message = pr.get("message", "")
+            else:
+                msg = pr.get("message", "")
+                reason = pr.get("reason", "")
+                c.status = "unresolved"
+                c.backend = "prove"
+                c.guarantee = "unknown"
+                c.message = msg
+                if "timeout" in (reason + msg).lower():
+                    c.failure_reason = "solver-timeout"
+                elif reason == "counterexample-to-induction" or "induction" in msg.lower():
+                    c.failure_reason = "non-inductive"
+                    c.suggestion = f"try k={prove_k + 1} or strengthen the invariant"
+                else:
+                    c.failure_reason = "solver-timeout" if "timeout" in msg.lower() else "non-inductive"
+                    c.suggestion = "try a larger k or strengthen the invariant"
     if trace is not None:
         checks.insert(0, _trace_conformance_check())
 

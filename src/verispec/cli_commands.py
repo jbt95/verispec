@@ -848,6 +848,8 @@ def cmd_verify_loop(args) -> int:
         semantic_strength=getattr(args, "semantic_strength", False),
         io_cases=io_cases,
         reference=reference,
+        escalate=getattr(args, "escalate", False),
+        prove_k=getattr(args, "prove_k", 1),
     )
     payload = {
         "tool": "verispec",
@@ -1162,4 +1164,162 @@ def cmd_spec_strength(args) -> int:
     )
     if weak:
         return EXIT_VIOLATION
+    return EXIT_OK
+
+
+def cmd_draft(args) -> int:
+    from .draft import draft_from_plan
+
+    plan = getattr(args, "from_", None)
+    code_root = getattr(args, "code", None)
+    template = getattr(args, "template", None)
+    out_path = getattr(args, "output", None) or getattr(args, "o", None)
+    q_path = getattr(args, "questions", None)
+    try:
+        draft_text, questions = draft_from_plan(plan, code_root=code_root, template=template)
+    except Exception as e:
+        print(f"error: {e}", file=sys.stderr)
+        return EXIT_SPEC_ERROR
+    if out_path:
+        Path(out_path).write_text(draft_text)
+    else:
+        print(draft_text, end="")
+    if q_path:
+        Path(q_path).write_text("\n".join(f"- {q}" for q in questions) + "\n")
+    # print summary to stderr? tests may capture stdout. If no out_path, already printed yaml. Questions file only.
+    return EXIT_OK
+
+
+def cmd_evidence(args) -> int:
+    from .evidence import build_evidence, format_evidence_md, format_evidence_json
+
+    spec = _load_spec_or_die(args.spec)
+    trace = getattr(args, "trace", None)
+    events = getattr(args, "events", None)
+    events_list = [e.strip() for e in events.split(",")] if events else None
+    base = getattr(args, "base", None)
+    payload = build_evidence(spec, trace=trace, events=events_list, base=base)
+    fmt = getattr(args, "format", "text")
+    if fmt == "json":
+        print(format_evidence_json(payload))
+        return EXIT_OK
+    if fmt == "sarif":
+        import json
+        print(json.dumps({"version": "2.1.0", "runs": [{"results": payload.get("properties", [])}]}, indent=2))
+        return EXIT_OK
+    if fmt == "md":
+        print(format_evidence_md(payload), end="")
+        return EXIT_OK
+    print(format_evidence_md(payload), end="")
+    return EXIT_OK
+
+
+def cmd_spec_diff(args) -> int:
+    from .model import load_spec
+    from .spec_diff import spec_diff
+
+    spec = _load_spec_or_die(args.spec)
+    base_ref = args.base
+    base_spec = None
+    # if base is an existing path, load directly
+    if Path(base_ref).is_file():
+        base_spec = load_spec(base_ref)
+    else:
+        # try git show base:spec
+        import subprocess
+        rel = Path(args.spec)
+        try:
+            # relative to cwd
+            out = subprocess.check_output(["git", "show", f"{base_ref}:{rel.as_posix()}"], stderr=subprocess.DEVNULL)
+            import tempfile, os
+            fd, p = tempfile.mkstemp(suffix=".yaml")
+            with os.fdopen(fd, "wb") as f:
+                f.write(out)
+            base_spec = load_spec(p)
+            os.unlink(p)
+        except Exception as e:
+            print(f"error: cannot resolve base spec: {e}", file=sys.stderr)
+            return EXIT_SPEC_ERROR
+    result = spec_diff(spec, base_spec)
+    fmt = getattr(args, "format", "text")
+    import json
+    if fmt == "json":
+        print(json.dumps(result, indent=2))
+    else:
+        print(f"spec-diff: {result.get('relation', 'unknown')}")
+        for item in result.get("added", []):
+            print(f"  + {item}")
+        for item in result.get("removed", []):
+            print(f"  - {item}")
+        for item in result.get("changed", []):
+            print(f"  ~ {item.get('name')}: {item.get('change')}")
+    return EXIT_OK
+
+
+def cmd_export_verus(args) -> int:
+    from .verus import export_verus
+
+    spec = _load_spec_or_die(args.spec)
+    text = export_verus(spec)
+    out = getattr(args, "output", None) or getattr(args, "o", None)
+    if out:
+        Path(out).write_text(text)
+    else:
+        print(text, end="")
+    return EXIT_OK
+
+
+def cmd_check_verus(args) -> int:
+    from .verus import check_verus
+
+    spec = _load_spec_or_die(args.spec)
+    crate = getattr(args, "crate", None)
+    timeout = getattr(args, "timeout", 120)
+    result = check_verus(spec, crate=crate, timeout=timeout)
+    fmt = getattr(args, "format", "text")
+    import json
+    if fmt == "json":
+        print(json.dumps(result, indent=2))
+    else:
+        print(result.get("message", result.get("status")))
+    if result.get("status") == "violation":
+        return EXIT_VIOLATION
+    if result.get("status") in ("ok", "skipped"):
+        return EXIT_OK
+    return EXIT_TOOL_ERROR
+
+
+def cmd_plan_link(args) -> int:
+    from .planlink import plan_link
+
+    spec = _load_spec_or_die(args.spec)
+    plan = args.plan
+    result = plan_link(spec, plan)
+    fmt = getattr(args, "format", "text")
+    import json
+    if fmt == "json":
+        print(json.dumps(result, indent=2))
+    else:
+        print(f"decisions: {len(result.get('decisions', []))}")
+        print(f"uncovered: {len(result.get('uncovered', result.get('uncovered_decisions', [])))}")
+        for u in result.get("uncovered", result.get("uncovered_decisions", [])):
+            print(f"  - {u}")
+        print(f"orphans: {result.get('orphan_invariants', result.get('orphans', []))}")
+    return EXIT_OK
+
+
+def cmd_observe_browser(args) -> int:
+    from .observe_browser import convert
+
+    spec = _load_spec_or_die(args.spec)
+    mapping = args.mapping
+    inp = args.input
+    steps = convert(spec, mapping, inp)
+    out = getattr(args, "output", None) or getattr(args, "o", None)
+    import json
+    text = json.dumps(steps, indent=2)
+    if out:
+        Path(out).write_text(text)
+    else:
+        print(text)
     return EXIT_OK

@@ -41,6 +41,13 @@ from .cli_commands import (
     cmd_validate,
     cmd_verify_loop,
     cmd_verify_signature,
+    cmd_check_verus,
+    cmd_draft,
+    cmd_evidence,
+    cmd_export_verus,
+    cmd_observe_browser,
+    cmd_plan_link,
+    cmd_spec_diff,
     cmd_version,
     cmd_view,
 )
@@ -450,6 +457,13 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="run VerusEval-style vacuity and I/O checks before invariant escalation",
     )
+    sp.add_argument(
+        "--escalate",
+        action="store_true",
+        help="escalate through prove/BMC/property tests and classify failures",
+    )
+    sp.add_argument("--prove-k", type=int, default=1, help="k for prove round when escalating")
+
     _add_format(sp)
     sp.set_defaults(func=cmd_verify_loop)
 
@@ -570,5 +584,54 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--range", help="git range BASE..HEAD (alternative to --base/--head)")
     _add_format(sp)
     sp.set_defaults(func=cmd_drift)
+
+
+    sp = sub.add_parser("draft", help="draft a spec from a plan")
+    sp.add_argument("--from", dest="from_", required=True, help="plan file")
+    sp.add_argument("--code", help="code root")
+    sp.add_argument("--template", help="template name")
+    sp.add_argument("-o", "--output", help="output draft yaml")
+    sp.add_argument("--questions", help="questions output file")
+    _add_format(sp)
+    sp.set_defaults(func=cmd_draft)
+
+    sp = sub.add_parser("evidence", help="per-property evidence table")
+    sp.add_argument("spec")
+    sp.add_argument("--trace", help="trace file")
+    sp.add_argument("--events", help="comma-separated events")
+    sp.add_argument("--base", help="base git ref")
+    sp.add_argument("--format", choices=("md", "json", "sarif"), default="md")
+    sp.set_defaults(func=cmd_evidence)
+
+    sp = sub.add_parser("spec-diff", help="semantic diff between spec versions")
+    sp.add_argument("spec")
+    sp.add_argument("--base", required=True, help="base ref or path")
+    _add_format(sp)
+    sp.set_defaults(func=cmd_spec_diff)
+
+    sp = sub.add_parser("export-verus", help="export Verus contracts")
+    sp.add_argument("spec")
+    sp.add_argument("-o", "--output")
+    sp.set_defaults(func=cmd_export_verus)
+
+    sp = sub.add_parser("check-verus", help="run Verus if available")
+    sp.add_argument("spec")
+    sp.add_argument("--crate", help="crate path")
+    sp.add_argument("--timeout", type=int, default=120)
+    _add_format(sp)
+    sp.set_defaults(func=cmd_check_verus)
+
+    sp = sub.add_parser("plan-link", help="link spec to plan decisions")
+    sp.add_argument("spec")
+    sp.add_argument("--plan", required=True, help="plan file")
+    _add_format(sp)
+    sp.set_defaults(func=cmd_plan_link)
+
+    sp = sub.add_parser("observe-browser", help="convert browser/CUA session to trace")
+    sp.add_argument("--spec", required=True)
+    sp.add_argument("--mapping", required=True)
+    sp.add_argument("--input", required=True)
+    sp.add_argument("-o", "--output")
+    sp.set_defaults(func=cmd_observe_browser)
 
     return p

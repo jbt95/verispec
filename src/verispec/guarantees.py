@@ -17,9 +17,11 @@ The vocabulary answers two questions for every label:
 from __future__ import annotations
 
 from collections.abc import Iterable
+from dataclasses import dataclass
 from typing import Any
 
 __all__ = [
+    "PropertyEvidence",
     "GUARANTEES",
     "GUARANTEE_SCOPES",
     "GUARANTEE_BOUNDED",
@@ -133,6 +135,11 @@ EVIDENCE_LEVELS: dict[str, str] = {
         "A recorded trace of the real implementation was replayed against the "
         "contract and every step conformed."
     ),
+    "tested": "Property-based tests were generated and passed.",
+    "observed": "Runtime observation recorded conformance.",
+    "unchecked": "No evidence has been collected for this property.",
+    "violated": "A counterexample or violation was found.",
+    "concurrent-explored": "Interleavings were explored up to the bound.",
 }
 
 
@@ -234,6 +241,28 @@ def scope_note(label: str) -> str:
 def is_at_least(label: str, minimum: str) -> bool:
     """Whether a result is at least as strong as a required level."""
     return _ORDER.get(_base_label(label), 0) >= _ORDER.get(_base_label(minimum), 0)
+
+
+
+@dataclass
+class PropertyEvidence:
+    """Per-property evidence record (RFC-0008)."""
+
+    property: str
+    level: str
+    scope: str = "contract"
+    backend: str = "none"
+    artifact: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "property": self.property,
+            "level": self.level,
+            "scope": self.scope,
+            "backend": self.backend,
+            "artifact": self.artifact,
+        }
+
 
 
 def evidence(result: dict[str, Any]) -> str:

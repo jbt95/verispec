@@ -174,6 +174,7 @@ class Action:
             self.params[pn] = var
         self.requires = list(raw.get("requires") or [])
         self.effects = dict(raw.get("effects") or {})
+        self.traces_to = raw.get("traces_to")
         # An action that is meant to change nothing - a read, a periodic
         # job that finds nothing to do, an access that is allowed - says so.
         # The linter then does not report it as a forgotten effect.
@@ -198,6 +199,7 @@ class Spec:
         self.raw = data
         self.name = data.get("name", "Unnamed")
         self.description = data.get("description", "")
+        self.meta = data.get("meta") if isinstance(data.get("meta"), dict) else {}
         raw_version = data.get("spec_version")
         self.spec_version = str(raw_version) if raw_version is not None else "0.1"
         self.declared_version = raw_version is not None
@@ -216,11 +218,12 @@ class Spec:
                     "name": inv.get("name", "invariant"),
                     "expr": inv.get("expr", ""),
                 }
-                # The mapping is metadata: it names the implementation an
-                # invariant is a claim about.  It is not part of the
-                # contract's meaning, and the checkers ignore it.
                 if "implements" in inv:
                     entry["implements"] = inv["implements"]
+                if "rationale" in inv:
+                    entry["rationale"] = inv["rationale"]
+                if "traces_to" in inv:
+                    entry["traces_to"] = inv["traces_to"]
                 self.invariants.append(entry)
             else:
                 raise SpecError("invariants must be strings or {name, expr} mappings")
@@ -320,6 +323,8 @@ class Spec:
             "actions": [a.raw for a in self.actions],
             "invariants": list(self.invariants),
         }
+        if self.meta:
+            out["meta"] = dict(self.meta)
         if self.fairness.weak or self.fairness.strong:
             out["fairness"] = {
                 "weak": list(self.fairness.weak),
